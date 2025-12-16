@@ -191,7 +191,8 @@ const App: React.FC = () => {
     };
 
     const handleTestMode = () => {
-        setPlayer({ ...INITIAL_PLAYER_STATE, mode: 'test', wallet: 9999, totalCandies: 9999, name: "테스트 유저", level: 20 });
+        // Set level to 1 for test mode as requested
+        setPlayer({ ...INITIAL_PLAYER_STATE, mode: 'test', wallet: 9999, totalCandies: 9999, name: "테스트 유저", level: 1 });
         setConfig(prev => ({...prev, dailyLimit: 999, shopLimit: 999}));
         setView(AppView.LOBBY);
     };
@@ -283,7 +284,8 @@ const App: React.FC = () => {
         savePlayerData(updated);
     };
 
-    const hardModeUnlocked = player.totalCandies >= 1000 || player.mode === 'test';
+    // Use config.hardModeCost to determine if hard mode is unlocked
+    const hardModeUnlocked = player.totalCandies >= config.hardModeCost || player.mode === 'test';
 
     const handleExitGame = () => {
         setGameOverModalOpen(false);
@@ -357,6 +359,7 @@ const App: React.FC = () => {
                             <div><label className="block text-xl font-bold text-white mb-3"><i className="fa-solid fa-cart-shopping mr-2 text-pink-500"></i>일일 상점 이용</label><input type="number" className="w-full h-14 px-4 text-xl border-2 border-slate-600 bg-slate-800 text-white rounded-2xl" value={config.shopLimit} onChange={(e) => setConfig({...config, shopLimit: parseInt(e.target.value)})} /></div>
                             <div><label className="block text-xl font-bold text-white mb-3"><i className="fa-solid fa-arrow-up-right-dots mr-2 text-green-500"></i>업그레이드 비용</label><input type="number" className="w-full h-14 px-4 text-xl border-2 border-slate-600 bg-slate-800 text-white rounded-2xl" value={config.priceUpgrade} onChange={(e) => setConfig({...config, priceUpgrade: parseInt(e.target.value)})} /></div>
                             <div><label className="block text-xl font-bold text-white mb-3"><i className="fa-solid fa-dice mr-2 text-purple-500"></i>뽑기 비용</label><input type="number" className="w-full h-14 px-4 text-xl border-2 border-slate-600 bg-slate-800 text-white rounded-2xl" value={config.priceGacha} onChange={(e) => setConfig({...config, priceGacha: parseInt(e.target.value)})} /></div>
+                            <div><label className="block text-xl font-bold text-white mb-3"><i className="fa-solid fa-lock-open mr-2 text-red-500"></i>하드모드 해금 비용</label><input type="number" className="w-full h-14 px-4 text-xl border-2 border-slate-600 bg-slate-800 text-white rounded-2xl" value={config.hardModeCost} onChange={(e) => setConfig({...config, hardModeCost: parseInt(e.target.value)})} /></div>
                         </div>
                         <div className="pt-6 border-t border-slate-700 flex flex-col gap-3">
                             <Button onClick={handleGenerateLink} variant="accent" className="text-xl py-4">✨ 설정 저장 및 매직 링크 복사</Button>
@@ -393,7 +396,7 @@ const App: React.FC = () => {
                         <button onClick={() => { audioManager.playClickSfx(); if(hardModeUnlocked) setIsHardMode(!isHardMode); }} className={`px-8 py-3 rounded-2xl font-black text-xl flex items-center gap-3 transition-all ${!hardModeUnlocked ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : isHardMode ? 'bg-red-500 text-white shadow-red-300 shadow-lg scale-105' : 'bg-white border-2 border-red-500 text-red-500 hover:bg-red-50'}`}>
                             {isHardMode ? <i className="fa-solid fa-fire animate-pulse"></i> : <i className="fa-solid fa-lock-open"></i>}
                             {isHardMode ? "하드 모드 ON" : "하드 모드 OFF"}
-                            {!hardModeUnlocked && <span className="text-xs font-normal ml-2">(누적 1000개 필요)</span>}
+                            {!hardModeUnlocked && <span className="text-xs font-normal ml-2">(누적 {config.hardModeCost}개 필요)</span>}
                         </button>
                     </div>
                     <Button onClick={startGame} variant="accent" className={`py-8 text-3xl mb-6 ${isHardMode ? 'bg-gradient-to-br from-red-600 to-red-800 ring-4 ring-red-300' : ''}`}>{isHardMode ? "🔥 하드모드 시작" : "▶ 게임 시작"}</Button>

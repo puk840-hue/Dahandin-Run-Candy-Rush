@@ -1,4 +1,5 @@
 
+
 export const SECRET_PASSPHRASE = "DAHANDIN_SECRET_2024"; 
 export const STORAGE_KEY = "dahandin_run_save_v4_react";
 
@@ -71,5 +72,6 @@ export const INITIAL_CONFIG = {
     priceUpgrade: 5,  
     priceGacha: 10,   
     dailyLimit: 5,    
-    shopLimit: 1      
+    shopLimit: 1,
+    hardModeCost: 200 // Default cost to unlock hard mode
 };

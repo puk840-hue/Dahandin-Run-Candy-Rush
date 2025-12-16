@@ -63,6 +63,7 @@ export interface GameConfig {
   priceGacha: number;
   dailyLimit: number;
   shopLimit: number;
+  hardModeCost: number; // New: threshold to unlock hard mode
 }
 
 export interface GameObject {

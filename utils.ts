@@ -6,13 +6,11 @@ import { SECRET_PASSPHRASE, STORAGE_KEY, CANDY_TYPES, CANDY_COLORS } from './con
 class AudioManager {
   private ctx: AudioContext | null = null;
   private bgmOscillators: AudioScheduledSourceNode[] = [];
-  private bgmGain: GainNode | null = null;
   private isBgmPlaying: boolean = false;
   private nextNoteTime: number = 0;
   private timerID: number | undefined;
   
   // Extended Melody: 20s Variation in C Major
-  // Frequencies: C4=261, D4=293, E4=329, F4=349, G4=392, A4=440, B4=493, C5=523, D5=587, E5=659
   private melody = [
     // Part A: Intro Arpeggios (C Major)
     { freq: 261.63, len: 0.2 }, { freq: 329.63, len: 0.2 }, { freq: 392.00, len: 0.2 }, { freq: 523.25, len: 0.2 }, // C-E-G-C
@@ -41,14 +39,19 @@ class AudioManager {
     if (!this.ctx) {
       this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
     }
+    // Attempt to resume if suspended (browser autoplay policy)
     if (this.ctx.state === 'suspended') {
-      this.ctx.resume();
+      this.ctx.resume().catch(() => {});
     }
+  }
+
+  // Public method to force resume (bind to user interaction)
+  resume() {
+    this.init();
   }
 
   playBgm() {
     this.init();
-    // Guard: ensure only one scheduler runs
     if (this.isBgmPlaying || !this.ctx) return;
     
     this.isBgmPlaying = true;
@@ -100,7 +103,6 @@ class AudioManager {
       osc.stop(time + note.len);
       
       this.bgmOscillators.push(osc);
-      // Cleanup old oscillators from array to prevent memory leak
       if (this.bgmOscillators.length > 50) this.bgmOscillators.shift();
   }
 
@@ -111,7 +113,6 @@ class AudioManager {
       const gain = this.ctx.createGain();
       
       osc.type = 'sine';
-      // Crisp UI Click
       osc.frequency.setValueAtTime(600, this.ctx.currentTime);
       osc.frequency.exponentialRampToValueAtTime(300, this.ctx.currentTime + 0.05);
       
@@ -131,9 +132,8 @@ class AudioManager {
       const gain = this.ctx.createGain();
       
       osc.type = 'sine';
-      // "Ding" sound: rapid high pitch slide
-      osc.frequency.setValueAtTime(880, this.ctx.currentTime); // A5
-      osc.frequency.exponentialRampToValueAtTime(1760, this.ctx.currentTime + 0.1); // A6
+      osc.frequency.setValueAtTime(880, this.ctx.currentTime); 
+      osc.frequency.exponentialRampToValueAtTime(1760, this.ctx.currentTime + 0.1); 
       
       gain.gain.setValueAtTime(0.1, this.ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.1);
@@ -147,7 +147,6 @@ class AudioManager {
   playUpgradeSfx() {
       this.init();
       if (!this.ctx) return;
-      // "Ta-da" Arpeggio (C5-E5-G5-C6)
       const now = this.ctx.currentTime;
       [523.25, 659.25, 783.99, 1046.50].forEach((freq, i) => {
           const osc = this.ctx!.createOscillator();
@@ -168,7 +167,6 @@ class AudioManager {
   playGachaSfx() {
       this.init();
       if (!this.ctx) return;
-      // "Fanfare" (Triplets C-C-C, Long G, Long C)
       const now = this.ctx.currentTime;
       const notes = [
           {f: 523.25, t: 0, d: 0.1}, {f: 523.25, t: 0.1, d: 0.1}, {f: 523.25, t: 0.2, d: 0.1}, // Triplet C
@@ -179,12 +177,12 @@ class AudioManager {
       notes.forEach(n => {
           const osc = this.ctx!.createOscillator();
           const gain = this.ctx!.createGain();
-          osc.type = 'square'; // Brassy sound
+          osc.type = 'square'; 
           osc.frequency.value = n.f;
           
           gain.gain.setValueAtTime(0.1, now + n.t);
-          gain.gain.linearRampToValueAtTime(0.08, now + n.t + 0.05); // Attack
-          gain.gain.exponentialRampToValueAtTime(0.001, now + n.t + n.d); // Decay
+          gain.gain.linearRampToValueAtTime(0.08, now + n.t + 0.05); 
+          gain.gain.exponentialRampToValueAtTime(0.001, now + n.t + n.d); 
           
           osc.connect(gain);
           gain.connect(this.ctx!.destination);
@@ -199,9 +197,7 @@ class AudioManager {
       const osc = this.ctx.createOscillator();
       const gain = this.ctx.createGain();
       
-      // Punchier 8-bit crash
       osc.type = 'square'; 
-      // Fast drop from mid to low frequency
       osc.frequency.setValueAtTime(300, this.ctx.currentTime);
       osc.frequency.exponentialRampToValueAtTime(50, this.ctx.currentTime + 0.15);
       

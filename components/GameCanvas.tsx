@@ -69,6 +69,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ playerState, config, onGameOver
 
     switch(o.type) {
         case 'cactus':
+            // Optimization: Avoid creating gradients every frame if possible, 
+            // but for simplicity we keep it. The major bottleneck was filter() in loop.
             const cactusColor = ctx.createLinearGradient(0,0,w,0);
             cactusColor.addColorStop(0, "#4caf50"); cactusColor.addColorStop(1, "#2e7d32");
             ctx.fillStyle = cactusColor;
@@ -135,6 +137,9 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ playerState, config, onGameOver
   };
 
   const jumpAction = useCallback(() => {
+    // Ensure audio context is active (mobile requirement)
+    audioManager.resume();
+    
     if(!gameState.current.playing || isPaused) return;
     
     // Updated Jump Logic: 80% height, 1.1x speed
@@ -156,19 +161,41 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ playerState, config, onGameOver
   }, [isPaused]);
 
   const slideStart = useCallback(() => {
+      audioManager.resume();
       if(!gameState.current.playing || isPaused) return;
       slidePressed.current = true; // Track intent
 
       if (ginger.current.grounded) {
           gameState.current.isSliding = true;
       } 
-      // Removed "Fast Fall" else block - no effect in air
   }, [isPaused]);
 
   const slideEnd = useCallback(() => {
       slidePressed.current = false;
       gameState.current.isSliding = false;
   }, []);
+
+  // Use robust event handling for virtual buttons
+  // "key chewing" usually happens because of zoom delay or touch conflicts.
+  // We use preventDefault and stopPropagation to ensure clean execution.
+  const handleJumpInput = useCallback((e: React.SyntheticEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      jumpAction();
+  }, [jumpAction]);
+
+  const handleSlideStartInput = useCallback((e: React.SyntheticEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      slideStart();
+  }, [slideStart]);
+
+  const handleSlideEndInput = useCallback((e: React.SyntheticEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      slideEnd();
+  }, [slideEnd]);
+
 
   // --- SEPARATE BGM EFFECT ---
   // This ensures BGM only starts on mount and stops on unmount,
@@ -274,7 +301,16 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ playerState, config, onGameOver
         const charGroundY = groundY - 25;
         let onGround = false;
         
-        const hole = objects.current.find(o => o.type === 'hole' && ginger.current.x > o.x && ginger.current.x < o.x + (o.w || 200));
+        // OPTIMIZED COLLISION LOOP: Removed filter() to prevent garbage collection
+        let hole = null;
+        for (let i = 0; i < objects.current.length; i++) {
+            const o = objects.current[i];
+            if (o.type === 'hole' && ginger.current.x > o.x && ginger.current.x < o.x + (o.w || 200)) {
+                hole = o;
+                break; 
+            }
+        }
+        
         let fell = false;
         if (ginger.current.y > charGroundY) {
             if (hole) { onGround = false; } 
@@ -301,10 +337,14 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ playerState, config, onGameOver
         ctx.fillStyle = "#388e3c";
         for(let i=offset; i<canvas.width; i+=grassPatternWidth) { ctx.beginPath(); ctx.moveTo(i, groundY); ctx.lineTo(i+20, groundY+20); ctx.lineTo(i, groundY+20); ctx.fill(); }
 
-        objects.current.filter(o => o.type === 'hole').forEach(o => {
-             ctx.save(); ctx.globalCompositeOperation = 'destination-out'; ctx.fillStyle = "black"; ctx.fillRect(o.x + 10, groundY, (o.w || 200) - 20, canvas.height); ctx.restore();
-             ctx.fillStyle = "#3e2723"; ctx.fillRect(o.x, groundY + 20, 10, 100); ctx.fillRect(o.x + (o.w||200) - 10, groundY + 20, 10, 100);
-        });
+        // Render Holes (Optimized: No new array creation)
+        for (let i = 0; i < objects.current.length; i++) {
+             const o = objects.current[i];
+             if (o.type === 'hole') {
+                 ctx.save(); ctx.globalCompositeOperation = 'destination-out'; ctx.fillStyle = "black"; ctx.fillRect(o.x + 10, groundY, (o.w || 200) - 20, canvas.height); ctx.restore();
+                 ctx.fillStyle = "#3e2723"; ctx.fillRect(o.x, groundY + 20, 10, 100); ctx.fillRect(o.x + (o.w||200) - 10, groundY + 20, 10, 100);
+             }
+        }
 
         // Spawning
         if(gameState.current.totalDistance >= gameState.current.nextObstacleDist) {
@@ -427,10 +467,22 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ playerState, config, onGameOver
         <div className={`absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 text-5xl md:text-7xl font-black text-yellow-300 italic transition-all duration-300 pointer-events-none z-50 ${isSpeedAlert ? 'opacity-100 scale-125' : 'opacity-0 scale-75'}`} style={{textShadow: '0 0 20px #ff6f00, 4px 4px 0 #bf360c'}}>⚡ 스피드 업!</div>
         {/* Controls */}
         <div className="absolute bottom-6 right-6 z-20">
-            <button className="w-24 h-24 md:w-32 md:h-32 bg-white/20 border-4 border-white/60 rounded-full flex items-center justify-center text-white text-3xl backdrop-blur-md shadow-2xl active:scale-95 active:bg-white/40 transition-transform" onTouchStart={(e) => { e.preventDefault(); jumpAction(); }} onMouseDown={(e) => { e.preventDefault(); jumpAction(); }}><i className="fa-solid fa-arrow-up text-4xl md:text-5xl drop-shadow-md"></i></button>
+            {/* Added touch-none class and simplified handlers to prevent zoom/delay/double-tap issues */}
+            <button className="w-24 h-24 md:w-32 md:h-32 bg-white/20 border-4 border-white/60 rounded-full flex items-center justify-center text-white text-3xl backdrop-blur-md shadow-2xl active:scale-95 active:bg-white/40 transition-transform touch-none" 
+                onTouchStart={handleJumpInput} 
+                onMouseDown={handleJumpInput}>
+                <i className="fa-solid fa-arrow-up text-4xl md:text-5xl drop-shadow-md"></i>
+            </button>
         </div>
         <div className="absolute bottom-6 left-6 z-20">
-            <button className="w-20 h-20 md:w-24 md:h-24 bg-white/20 border-4 border-white/60 rounded-full flex items-center justify-center text-white text-2xl backdrop-blur-md shadow-2xl active:scale-95 active:bg-white/40 transition-transform" onTouchStart={(e) => { e.preventDefault(); slideStart(); }} onTouchEnd={(e) => { e.preventDefault(); slideEnd(); }} onMouseDown={(e) => { e.preventDefault(); slideStart(); }} onMouseUp={(e) => { e.preventDefault(); slideEnd(); }} onMouseLeave={(e) => { e.preventDefault(); slideEnd(); }}><i className="fa-solid fa-arrow-down text-3xl md:text-4xl drop-shadow-md"></i></button>
+            <button className="w-20 h-20 md:w-24 md:h-24 bg-white/20 border-4 border-white/60 rounded-full flex items-center justify-center text-white text-2xl backdrop-blur-md shadow-2xl active:scale-95 active:bg-white/40 transition-transform touch-none" 
+                onTouchStart={handleSlideStartInput} 
+                onTouchEnd={handleSlideEndInput} 
+                onMouseDown={handleSlideStartInput} 
+                onMouseUp={handleSlideEndInput} 
+                onMouseLeave={handleSlideEndInput}>
+                <i className="fa-solid fa-arrow-down text-3xl md:text-4xl drop-shadow-md"></i>
+            </button>
         </div>
     </div>
   );
