@@ -10,8 +10,8 @@ class AudioManager {
   private nextNoteTime: number = 0;
   private timerID: number | undefined;
   
-  // Extended Melody: 20s Variation in C Major
-  private melody = [
+  // Normal Melody: 20s Variation in C Major (Upbeat)
+  private melodyNormal = [
     // Part A: Intro Arpeggios (C Major)
     { freq: 261.63, len: 0.2 }, { freq: 329.63, len: 0.2 }, { freq: 392.00, len: 0.2 }, { freq: 523.25, len: 0.2 }, // C-E-G-C
     { freq: 392.00, len: 0.2 }, { freq: 523.25, len: 0.2 }, { freq: 659.25, len: 0.4 }, // G-C-E (hold)
@@ -33,7 +33,41 @@ class AudioManager {
     { freq: 293.66, len: 0.2 }, { freq: 392.00, len: 0.2 }, { freq: 493.88, len: 0.2 }, { freq: 587.33, len: 0.2 }, // D-G-B-D
     { freq: 523.25, len: 0.4 }, { freq: 0, len: 0.2 } // C (End)
   ];
+
+  // Hard Mode Melody: Extended 20s Loop (Fast, A Minor, Tense)
+  // Approx 150BPM feel (0.1s - 0.2s notes)
+  private melodyHard = [
+    // --- SECTION A: The Chase (A Minor Arpeggios) ---
+    { freq: 440.00, len: 0.1 }, { freq: 0, len: 0.05 }, { freq: 440.00, len: 0.1 }, { freq: 523.25, len: 0.1 }, // A-A-C
+    { freq: 659.25, len: 0.1 }, { freq: 523.25, len: 0.1 }, { freq: 440.00, len: 0.1 }, { freq: 349.23, len: 0.1 }, // E-C-A-F
+    { freq: 329.63, len: 0.1 }, { freq: 440.00, len: 0.1 }, { freq: 523.25, len: 0.1 }, { freq: 659.25, len: 0.1 }, // E-A-C-E
+    { freq: 880.00, len: 0.2 }, { freq: 659.25, len: 0.2 }, // High A - E
+
+    { freq: 440.00, len: 0.1 }, { freq: 0, len: 0.05 }, { freq: 440.00, len: 0.1 }, { freq: 523.25, len: 0.1 }, // A-A-C
+    { freq: 659.25, len: 0.1 }, { freq: 523.25, len: 0.1 }, { freq: 440.00, len: 0.1 }, { freq: 349.23, len: 0.1 }, // E-C-A-F
+    { freq: 493.88, len: 0.1 }, { freq: 587.33, len: 0.1 }, { freq: 698.46, len: 0.1 }, { freq: 830.61, len: 0.1 }, // B-D-F-Ab (Diminished climb)
+    { freq: 880.00, len: 0.2 }, { freq: 0, len: 0.1 },
+
+    // --- SECTION B: Rising Tension (Chromatic / Fast) ---
+    { freq: 523.25, len: 0.1 }, { freq: 554.37, len: 0.1 }, { freq: 587.33, len: 0.1 }, { freq: 622.25, len: 0.1 }, // Chromatic C -> Eb
+    { freq: 659.25, len: 0.1 }, { freq: 698.46, len: 0.1 }, { freq: 739.99, len: 0.1 }, { freq: 783.99, len: 0.1 }, // Chromatic E -> G
+    { freq: 880.00, len: 0.1 }, { freq: 0, len: 0.05 }, { freq: 880.00, len: 0.1 }, { freq: 0, len: 0.05 }, // A Stabs
+    { freq: 830.61, len: 0.1 }, { freq: 783.99, len: 0.1 }, { freq: 739.99, len: 0.1 }, { freq: 698.46, len: 0.1 }, // Descent
+
+    // --- SECTION C: The Danger Zone (Low rumble + High trills) ---
+    { freq: 220.00, len: 0.1 }, { freq: 220.00, len: 0.1 }, { freq: 329.63, len: 0.1 }, { freq: 220.00, len: 0.1 }, // Low A Riff
+    { freq: 1046.50, len: 0.05 }, { freq: 987.77, len: 0.05 }, { freq: 1046.50, len: 0.1 }, // High Trill
+    { freq: 220.00, len: 0.1 }, { freq: 220.00, len: 0.1 }, { freq: 349.23, len: 0.1 }, { freq: 220.00, len: 0.1 }, // Low A Riff
+    { freq: 1174.66, len: 0.05 }, { freq: 1108.73, len: 0.05 }, { freq: 1174.66, len: 0.1 }, // High Trill
+
+    // --- SECTION D: Loop Turnaround (Dm -> E7 -> Am) ---
+    { freq: 587.33, len: 0.15 }, { freq: 698.46, len: 0.15 }, { freq: 880.00, len: 0.15 }, { freq: 1046.50, len: 0.15 }, // Dm Arp
+    { freq: 659.25, len: 0.15 }, { freq: 830.61, len: 0.15 }, { freq: 987.77, len: 0.15 }, { freq: 1318.51, len: 0.15 }, // E7 Arp
+    { freq: 880.00, len: 0.3 }, { freq: 440.00, len: 0.2 }, { freq: 220.00, len: 0.2 }, { freq: 0, len: 0.1 } // Hit A
+  ];
+
   private currentNoteIndex = 0;
+  private currentMelody: {freq: number, len: number}[] = [];
 
   private init() {
     if (!this.ctx) {
@@ -50,13 +84,17 @@ class AudioManager {
     this.init();
   }
 
-  playBgm() {
+  playBgm(mode: 'normal' | 'hard' = 'normal') {
     this.init();
-    if (this.isBgmPlaying || !this.ctx) return;
+    // Stop if already playing to allow restart or mode switch
+    this.stopBgm();
+
+    if (!this.ctx) return;
     
     this.isBgmPlaying = true;
     this.currentNoteIndex = 0;
     this.nextNoteTime = this.ctx.currentTime + 0.1;
+    this.currentMelody = mode === 'hard' ? this.melodyHard : this.melodyNormal;
     this.scheduler();
   }
 
@@ -74,9 +112,9 @@ class AudioManager {
     
     // Schedule notes ahead (lookahead 0.1s)
     while (this.nextNoteTime < this.ctx.currentTime + 0.1) {
-        this.scheduleNote(this.melody[this.currentNoteIndex], this.nextNoteTime);
-        this.nextNoteTime += this.melody[this.currentNoteIndex].len;
-        this.currentNoteIndex = (this.currentNoteIndex + 1) % this.melody.length;
+        this.scheduleNote(this.currentMelody[this.currentNoteIndex], this.nextNoteTime);
+        this.nextNoteTime += this.currentMelody[this.currentNoteIndex].len;
+        this.currentNoteIndex = (this.currentNoteIndex + 1) % this.currentMelody.length;
     }
     this.timerID = window.setTimeout(() => this.scheduler(), 25);
   }
@@ -88,7 +126,7 @@ class AudioManager {
       const osc = this.ctx.createOscillator();
       const gain = this.ctx.createGain();
       
-      osc.type = 'triangle'; // Smooth upbeat sound
+      osc.type = this.currentMelody === this.melodyHard ? 'sawtooth' : 'triangle'; // Sawtooth for harsher/tense sound in Hard mode
       osc.frequency.value = note.freq;
       
       osc.connect(gain);

@@ -16,7 +16,7 @@ const Panel: React.FC<{ children: React.ReactNode, title?: string, className?: s
 );
 
 // Character Preview Component (Optimized scale & transparency)
-const CharacterPreview: React.FC<{ player: PlayerState }> = ({ player }) => {
+const CharacterPreview: React.FC<{ player: PlayerState, scale?: number }> = ({ player, scale = 2 }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     useEffect(() => {
         const ctx = canvasRef.current?.getContext('2d');
@@ -25,29 +25,39 @@ const CharacterPreview: React.FC<{ player: PlayerState }> = ({ player }) => {
         let animationId: number;
         const render = () => {
             // Updated Canvas Resolution for cleaner look
-            ctx.clearRect(0, 0, 300, 400);
+            const W = 500;
+            const H = 600;
+            ctx.clearRect(0, 0, W, H);
             frame++;
             const animTick = frame * 16; 
             
             // Transform for BIGGER character
             ctx.save();
-            ctx.scale(2, 2); // Double scale
-            // Adjusted coordinates for scaled drawing
-            // Original center ~150, now ~75. Y adjusted.
-            drawCharacter(ctx, 75, 140, player.currentSkin, player.equipped, animTick, false, 'happy', 0, true);
-            const candyY = 100 + Math.sin(frame * 0.05) * 5;
-            drawCandySimple(ctx, 120, candyY, 12, player.currentCandySkin);
+            ctx.scale(scale, scale); 
+            
+            // Calculate center in scaled coordinates
+            // If canvas width is 500, and scale is 3.5, visible width in scaled units is 500/3.5
+            // Center X is (500/2)/3.5
+            const cx = (W / 2) / scale;
+            const cy = (H / 2) / scale;
+
+            // Draw character centered (slightly adjusted Y for balance)
+            drawCharacter(ctx, cx, cy + 20, player.currentSkin, player.equipped, animTick, false, 'happy', 0, true);
+            
+            const candyY = (cy - 10) + Math.sin(frame * 0.05) * 5;
+            // Draw candy relative to the center calculated above
+            drawCandySimple(ctx, cx + 45, candyY, 15, player.currentCandySkin);
             ctx.restore();
             
             animationId = requestAnimationFrame(render);
         };
         render();
         return () => cancelAnimationFrame(animationId);
-    }, [player.currentSkin, player.equipped, player.currentCandySkin]);
+    }, [player.currentSkin, player.equipped, player.currentCandySkin, scale]);
 
     return (
         <div className="w-full h-full flex items-center justify-center">
-             <canvas ref={canvasRef} width={300} height={400} className="w-full h-full object-contain drop-shadow-xl" />
+             <canvas ref={canvasRef} width={500} height={600} className="w-full h-full object-contain drop-shadow-2xl" />
         </div>
     );
 };
@@ -317,26 +327,83 @@ const App: React.FC = () => {
                 </div>
             )}
             
-            {/* Intro View */}
+            {/* Intro View - REDESIGNED 7:3 Split */}
             {view === AppView.INTRO && (
-                <div className="w-full h-full flex flex-col items-center justify-center text-white relative">
-                    <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
-                    <div className="z-10 text-center">
-                        <h1 className="text-7xl md:text-9xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 to-amber-500 mb-4 drop-shadow-2xl" style={{filter: 'drop-shadow(0 0 20px rgba(255, 193, 7, 0.5))'}}>다했니 런</h1>
-                        <p className="text-2xl md:text-3xl font-bold text-white/80 mb-16 tracking-widest">COOKIE RUSH REMASTERED</p>
-                        <div className="flex flex-col gap-4 w-80 mx-auto">
-                            <Button onClick={handleTeacherLogin} variant="accent" className="text-xl py-4 shadow-orange-500/50">
-                                <i className="fa-solid fa-chalkboard-user"></i> 선생님 모드
-                            </Button>
-                            <Button onClick={handleTestMode} variant="secondary" className="bg-white/10 hover:bg-white/20 text-white backdrop-blur-md border border-white/20 text-xl py-4">
-                                <i className="fa-solid fa-gamepad"></i> 테스트 모드
-                            </Button>
-                        </div>
-                        <button onClick={() => { audioManager.playClickSfx(); setHelpOpen(true); }} className="mt-8 text-white/60 hover:text-white underline text-sm">선생님을 위한 도움말</button>
+                <div className="w-full h-full flex flex-col md:flex-row relative overflow-hidden bg-[#1a1a2e]">
+                    {/* Dynamic Background Elements (Shared) */}
+                    <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
+                        <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-purple-600/30 rounded-full blur-[100px] animate-pulse"></div>
+                        <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-amber-600/30 rounded-full blur-[100px] animate-pulse" style={{animationDelay: '1s'}}></div>
+                         {/* Floating Icons */}
+                        <div className="absolute top-[20%] left-[10%] text-4xl opacity-20 animate-bounce" style={{animationDuration: '3s'}}>🍪</div>
+                        <div className="absolute top-[15%] right-[20%] text-5xl opacity-20 animate-bounce" style={{animationDuration: '4s'}}>🍬</div>
+                        <div className="absolute bottom-[30%] left-[20%] text-3xl opacity-20 animate-bounce" style={{animationDuration: '5s'}}>🏃</div>
                     </div>
+
+                    {/* Left: 70% Character Showcase */}
+                    <div className="w-full md:w-[70%] h-[50%] md:h-full flex items-center justify-center relative z-10 p-4">
+                         {/* Big Halo */}
+                        <div className="absolute w-[80%] h-[80%] bg-gradient-to-t from-amber-500/10 to-transparent rounded-full blur-3xl animate-pulse"></div>
+                        <div className="w-full h-full flex items-center justify-center relative animate-fade-in-up">
+                            <CharacterPreview 
+                                player={{...INITIAL_PLAYER_STATE, currentSkin: "#8d6e63", equipped: { ...INITIAL_PLAYER_STATE.equipped, hat: 'crown', weapon: 'wand', clothes: 'tuxedo', shoes: 'boots' } }} 
+                                scale={3.5}
+                            />
+                        </div>
+                    </div>
+
+                    {/* Right: 30% Menu Actions */}
+                    <div className="w-full md:w-[30%] h-[50%] md:h-full bg-black/30 backdrop-blur-xl border-l border-white/10 flex flex-col items-center justify-center p-8 z-20 shadow-2xl relative">
+                        {/* Title Group */}
+                        <div className="mb-10 text-center group">
+                            <div className="relative inline-block">
+                                <h1 className="text-6xl md:text-7xl font-black text-transparent bg-clip-text bg-gradient-to-br from-amber-300 via-orange-400 to-red-500 drop-shadow-2xl tracking-tighter" style={{ textShadow: '0 4px 20px rgba(255, 160, 0, 0.5)' }}>
+                                    다했니 런
+                                </h1>
+                                <div className="absolute -inset-1 bg-amber-400 blur-[40px] opacity-20 group-hover:opacity-40 transition-opacity"></div>
+                            </div>
+                            <div className="mt-3 inline-block px-4 py-1 rounded-full bg-white/10 border border-white/20">
+                                <span className="text-sm md:text-base font-bold text-white tracking-[0.2em] drop-shadow-md">REMASTERED</span>
+                            </div>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="flex flex-col gap-4 w-full max-w-xs">
+                             <button onClick={handleTeacherLogin} className="group relative w-full py-5 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold text-xl shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all overflow-hidden">
+                                <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
+                                <div className="relative flex items-center justify-center gap-3">
+                                    <span className="bg-white/20 p-2 rounded-lg"><i className="fa-solid fa-chalkboard-user"></i></span>
+                                    <span>선생님 시작하기</span>
+                                </div>
+                            </button>
+                            
+                            <button onClick={handleTestMode} className="w-full py-4 rounded-2xl bg-white/5 border-2 border-white/10 text-gray-300 font-bold text-lg hover:bg-white/10 hover:text-white hover:border-white/30 transition-all flex items-center justify-center gap-2">
+                                <i className="fa-solid fa-gamepad"></i> 테스트 모드로 체험하기
+                            </button>
+                        </div>
+
+                        {/* Footer Info */}
+                        <div className="mt-auto pt-8 text-center w-full">
+                            <button onClick={() => { audioManager.playClickSfx(); setHelpOpen(true); }} className="text-white/40 hover:text-white/80 text-sm font-medium transition-colors border-b border-transparent hover:border-white/40 pb-0.5">
+                                도움이 필요하신가요?
+                            </button>
+                            
+                            <a href="https://blog.naver.com/ppang_sem" target="_blank" rel="noopener noreferrer" className="block mt-2 text-white/20 hover:text-white/50 text-xs transition-colors" onClick={() => audioManager.playClickSfx()}>
+                                made by ppangsem
+                            </a>
+
+                            <div className="mt-4 flex justify-center gap-4 text-white/20 text-xl">
+                                <i className="fa-brands fa-react"></i>
+                                <i className="fa-brands fa-js"></i>
+                                <i className="fa-solid fa-gamepad"></i>
+                            </div>
+                            <p className="text-white/10 text-[10px] mt-2 font-mono">v2.5.0 • COOKIE RUSH</p>
+                        </div>
+                    </div>
+                    
                     {/* Help Modal */}
                     {helpOpen && (
-                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4" onClick={() => setHelpOpen(false)}>
+                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fade-in" onClick={() => setHelpOpen(false)}>
                             <div className="bg-white text-gray-800 p-8 rounded-2xl max-w-lg w-full relative" onClick={e => e.stopPropagation()}>
                                 <h3 className="text-2xl font-bold mb-4">📢 선생님 도움말</h3>
                                 <ul className="list-disc pl-5 space-y-2 text-left text-gray-600">
@@ -526,7 +593,7 @@ const App: React.FC = () => {
             {/* Game Canvas, Game Over, Records View ... */}
             {view === AppView.GAME && <GameCanvas key={gameId} playerState={player} config={config} onGameOver={handleGameOver} onAddScore={handleAddScore} isPaused={isGameOverModalOpen || isRestartConfirmOpen} isHardMode={isHardMode} />}
             {isGameOverModalOpen && lastGameResult && !isRestartConfirmOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-transparent backdrop-blur-none animate-fade-in pointer-events-auto">
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in pointer-events-auto">
                      <div className="bg-white/95 backdrop-blur-xl p-8 rounded-3xl shadow-2xl text-center max-w-sm w-full border-4 border-white transform scale-100 transition-transform mt-20">
                         <div className="text-4xl mb-2">{lastGameResult.fell ? "😵" : "💥"}</div>
                         <h1 className="text-4xl font-black text-gray-800 mb-2 drop-shadow-sm">{lastGameResult.fell ? "떨어졌어요!" : "부딪혔어요!"}</h1>

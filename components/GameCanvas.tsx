@@ -20,6 +20,19 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ playerState, config, onGameOver
   const [hudStage, setHudStage] = useState(1);
   const [isSpeedAlert, setIsSpeedAlert] = useState(false);
 
+  // Keep props in refs to access them in the game loop without re-running the effect
+  const playerStateRef = useRef(playerState);
+  const isPausedRef = useRef(isPaused);
+  const isHardModeRef = useRef(isHardMode);
+  const onGameOverRef = useRef(onGameOver);
+  const onAddScoreRef = useRef(onAddScore);
+
+  useEffect(() => { playerStateRef.current = playerState; }, [playerState]);
+  useEffect(() => { isPausedRef.current = isPaused; }, [isPaused]);
+  useEffect(() => { isHardModeRef.current = isHardMode; }, [isHardMode]);
+  useEffect(() => { onGameOverRef.current = onGameOver; }, [onGameOver]);
+  useEffect(() => { onAddScoreRef.current = onAddScore; }, [onAddScore]);
+
   // Mutable game state
   const gameState = useRef({
     playing: true,
@@ -141,7 +154,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ playerState, config, onGameOver
     // Ensure audio context is active (mobile requirement)
     audioManager.resume();
     
-    if(!gameState.current.playing || isPaused) return;
+    // Check pause state via ref to access latest value
+    if(!gameState.current.playing || isPausedRef.current) return;
     
     // Updated Jump Logic: 80% height, 1.1x speed
     if(ginger.current.grounded) {
@@ -159,17 +173,17 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ playerState, config, onGameOver
              particles.current.push({ x: ginger.current.x, y: ginger.current.y, type: 'impact', life: 20, dy: Math.random()*4 - 2, size: Math.random()*3 });
         }
     }
-  }, [isPaused]);
+  }, []);
 
   const slideStart = useCallback(() => {
       audioManager.resume();
-      if(!gameState.current.playing || isPaused) return;
+      if(!gameState.current.playing || isPausedRef.current) return;
       slidePressed.current = true; // Track intent
 
       if (ginger.current.grounded) {
           gameState.current.isSliding = true;
       } 
-  }, [isPaused]);
+  }, []);
 
   const slideEnd = useCallback(() => {
       slidePressed.current = false;
@@ -214,11 +228,11 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ playerState, config, onGameOver
   // This ensures BGM only starts on mount and stops on unmount,
   // preventing it from restarting when 'onAddScore' or state changes.
   useEffect(() => {
-      audioManager.playBgm();
+      audioManager.playBgm(isHardMode ? 'hard' : 'normal');
       return () => {
           audioManager.stopBgm();
       };
-  }, []);
+  }, [isHardMode]);
 
   // --- GAME LOOP EFFECT ---
   useEffect(() => {
@@ -250,7 +264,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ playerState, config, onGameOver
     let animationId: number;
 
     const loop = (timestamp: number) => {
-        if (isPaused) { 
+        // Use ref to check pause state without re-running effect
+        if (isPausedRef.current) { 
             gameState.current.lastFrameTime = timestamp; 
             animationId = requestAnimationFrame(loop); 
             return; 
@@ -277,9 +292,9 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ playerState, config, onGameOver
             gameState.current.celebrationTimer = 100;
         }
 
-        const hardModeMultiplier = isHardMode ? 1.5 : 1.0;
+        const hardModeMultiplier = isHardModeRef.current ? 1.5 : 1.0;
         const baseSpeed = 0.4 * dt; 
-        const currentSpeed = (baseSpeed + (playerState.level * 0.01)) * gameState.current.speedMultiplier * hardModeMultiplier;
+        const currentSpeed = (baseSpeed + (playerStateRef.current.level * 0.01)) * gameState.current.speedMultiplier * hardModeMultiplier;
         gameState.current.totalDistance += currentSpeed;
 
         const bgIdx = Math.min(gameState.current.currentStage, BG_COLORS.length - 1);
@@ -377,14 +392,14 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ playerState, config, onGameOver
                 }
             }
             objects.current.push({ type: objType, x: canvas.width, y: yPos, w: width, h: height, variation, initialY });
-            const hardModeFreq = isHardMode ? 1.5 : 1.0;
+            const hardModeFreq = isHardModeRef.current ? 1.5 : 1.0;
             gameState.current.nextObstacleDist = gameState.current.totalDistance + ((650 + Math.random() * 450) / gameState.current.difficultyMultiplier) / hardModeFreq;
         }
 
         if(gameState.current.totalDistance >= gameState.current.nextCandyDist) {
              const cy = groundY - (Math.random() * 200 + 60);
              if(!objects.current.some(o => Math.abs(o.x - canvas.width) < 150)) {
-                objects.current.push({ type: 'candy', x: canvas.width, y: cy, r: 25, candyIdx: playerState.currentCandySkin });
+                objects.current.push({ type: 'candy', x: canvas.width, y: cy, r: 25, candyIdx: playerStateRef.current.currentCandySkin });
                 gameState.current.nextCandyDist = gameState.current.totalDistance + (400 + Math.random() * 200);
              } else { gameState.current.nextCandyDist = gameState.current.totalDistance + 100; }
         }
@@ -401,10 +416,10 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ playerState, config, onGameOver
             if(o.type === 'candy') {
                 drawCandySimple(ctx, o.x, o.y, o.r || 20, o.candyIdx || 0);
                 if(Math.hypot(ginger.current.x - o.x, (ginger.current.y - 30) - o.y) < 60) {
-                    const pts = 1 * playerState.level; 
+                    const pts = 1 * playerStateRef.current.level; 
                     gameState.current.score += pts;
                     setHudScore(gameState.current.score);
-                    onAddScore(pts);
+                    onAddScoreRef.current(pts);
                     particles.current.push({ x: o.x, y: o.y, type: 'score', text: `+${pts}`, life: 50, dy: -1 });
                     
                     // SFX: Candy
@@ -425,7 +440,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ playerState, config, onGameOver
         }
 
         let expression = 'normal'; if(gameState.current.celebrationTimer > 0) { expression = 'happy'; gameState.current.celebrationTimer--; } if(collision) expression = 'cry';
-        drawCharacter(ctx, ginger.current.x, ginger.current.y, playerState.currentSkin, playerState.equipped, gameState.current.playTimeMs, gameState.current.isSliding, expression, ginger.current.dy, ginger.current.grounded);
+        drawCharacter(ctx, ginger.current.x, ginger.current.y, playerStateRef.current.currentSkin, playerStateRef.current.equipped, gameState.current.playTimeMs, gameState.current.isSliding, expression, ginger.current.dy, ginger.current.grounded);
 
         for(let i=0; i<particles.current.length; i++) {
             let p = particles.current[i]; p.life--; p.y += (p.dy || 0);
@@ -439,7 +454,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ playerState, config, onGameOver
             // SFX: Stop BGM, Play Fail
             audioManager.stopBgm();
             audioManager.playGameOverSfx();
-            onGameOver(gameState.current.score, Math.floor(gameState.current.playTimeMs/1000), fell); 
+            onGameOverRef.current(gameState.current.score, Math.floor(gameState.current.playTimeMs/1000), fell); 
         } 
         else { animationId = requestAnimationFrame(loop); }
     };
@@ -473,7 +488,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ playerState, config, onGameOver
         window.removeEventListener('keyup', handleKeyUp); 
         cancelAnimationFrame(animationId); 
     };
-  }, [jumpAction, slideStart, slideEnd, config, onGameOver, onAddScore, playerState.level, playerState.currentSkin, playerState.currentCandySkin, playerState.equipped, isPaused, isHardMode]);
+  }, []); // Dependencies empty to prevent canvas reset on re-renders
 
   return (
     <div ref={containerRef} className="relative w-full h-full">
