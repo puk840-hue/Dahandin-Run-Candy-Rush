@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { PlayerState, GameConfig, GameObject, Particle, Cloud } from '../types';
 import { BG_COLORS } from '../constants';
-import { drawCharacter, drawCandySimple } from '../utils';
+import { drawCharacter, drawCandySimple, audioManager } from '../utils';
 
 interface GameCanvasProps {
   playerState: PlayerState;
@@ -170,6 +170,17 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ playerState, config, onGameOver
       gameState.current.isSliding = false;
   }, []);
 
+  // --- SEPARATE BGM EFFECT ---
+  // This ensures BGM only starts on mount and stops on unmount,
+  // preventing it from restarting when 'onAddScore' or state changes.
+  useEffect(() => {
+      audioManager.playBgm();
+      return () => {
+          audioManager.stopBgm();
+      };
+  }, []);
+
+  // --- GAME LOOP EFFECT ---
   useEffect(() => {
     const canvas = canvasRef.current;
     if(!canvas) return;
@@ -199,7 +210,11 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ playerState, config, onGameOver
     let animationId: number;
 
     const loop = (timestamp: number) => {
-        if (isPaused) { gameState.current.lastFrameTime = timestamp; animationId = requestAnimationFrame(loop); return; }
+        if (isPaused) { 
+            gameState.current.lastFrameTime = timestamp; 
+            animationId = requestAnimationFrame(loop); 
+            return; 
+        }
         if (!gameState.current.playing) return;
 
         const deltaTime = timestamp - gameState.current.lastFrameTime;
@@ -338,6 +353,10 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ playerState, config, onGameOver
                     setHudScore(gameState.current.score);
                     onAddScore(pts);
                     particles.current.push({ x: o.x, y: o.y, type: 'score', text: `+${pts}`, life: 50, dy: -1 });
+                    
+                    // SFX: Candy
+                    audioManager.playCandySfx();
+
                     objects.current.splice(i, 1); i--; continue;
                 }
             } else if (o.type !== 'hole') {
@@ -362,7 +381,13 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ playerState, config, onGameOver
             if(p.life <= 0) { particles.current.splice(i, 1); i--; }
         }
 
-        if (collision) { gameState.current.playing = false; onGameOver(gameState.current.score, Math.floor(gameState.current.playTimeMs/1000), fell); } 
+        if (collision) { 
+            gameState.current.playing = false; 
+            // SFX: Stop BGM, Play Fail
+            audioManager.stopBgm();
+            audioManager.playGameOverSfx();
+            onGameOver(gameState.current.score, Math.floor(gameState.current.playTimeMs/1000), fell); 
+        } 
         else { animationId = requestAnimationFrame(loop); }
     };
 
@@ -372,7 +397,12 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ playerState, config, onGameOver
     const handleKeyUp = (e: KeyboardEvent) => { if(e.code === 'ArrowDown') { slideEnd(); } }
     window.addEventListener('keydown', handleKeyDown); window.addEventListener('keyup', handleKeyUp);
 
-    return () => { window.removeEventListener('resize', resize); window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); cancelAnimationFrame(animationId); };
+    return () => { 
+        window.removeEventListener('resize', resize); 
+        window.removeEventListener('keydown', handleKeyDown); 
+        window.removeEventListener('keyup', handleKeyUp); 
+        cancelAnimationFrame(animationId); 
+    };
   }, [jumpAction, slideStart, slideEnd, config, onGameOver, onAddScore, playerState.level, playerState.currentSkin, playerState.currentCandySkin, playerState.equipped, isPaused, isHardMode]);
 
   return (

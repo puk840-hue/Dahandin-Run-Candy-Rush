@@ -2,6 +2,152 @@ import CryptoJS from 'crypto-js';
 import { GameConfig, PlayerState } from './types';
 import { SECRET_PASSPHRASE, STORAGE_KEY, CANDY_TYPES, CANDY_COLORS } from './constants';
 
+// --- Audio Manager ---
+class AudioManager {
+  private ctx: AudioContext | null = null;
+  private bgmOscillators: AudioScheduledSourceNode[] = [];
+  private bgmGain: GainNode | null = null;
+  private isBgmPlaying: boolean = false;
+  private nextNoteTime: number = 0;
+  private timerID: number | undefined;
+  
+  // Extended Melody: 20s Variation in C Major
+  // Frequencies: C4=261, D4=293, E4=329, F4=349, G4=392, A4=440, B4=493, C5=523, D5=587, E5=659
+  private melody = [
+    // Part A: Intro Arpeggios (C Major)
+    { freq: 261.63, len: 0.2 }, { freq: 329.63, len: 0.2 }, { freq: 392.00, len: 0.2 }, { freq: 523.25, len: 0.2 }, // C-E-G-C
+    { freq: 392.00, len: 0.2 }, { freq: 523.25, len: 0.2 }, { freq: 659.25, len: 0.4 }, // G-C-E (hold)
+    { freq: 261.63, len: 0.2 }, { freq: 329.63, len: 0.2 }, { freq: 392.00, len: 0.2 }, { freq: 261.63, len: 0.2 }, // C-E-G-C
+    { freq: 293.66, len: 0.2 }, { freq: 349.23, len: 0.2 }, { freq: 392.00, len: 0.4 }, // D-F-G (hold)
+
+    // Part B: Running Theme (A Minor / F Major feel)
+    { freq: 440.00, len: 0.2 }, { freq: 523.25, len: 0.2 }, { freq: 440.00, len: 0.2 }, { freq: 349.23, len: 0.2 }, // A-C-A-F
+    { freq: 329.63, len: 0.2 }, { freq: 261.63, len: 0.2 }, { freq: 196.00, len: 0.4 }, // E-C-G3 (hold)
+    { freq: 349.23, len: 0.2 }, { freq: 440.00, len: 0.2 }, { freq: 523.25, len: 0.2 }, { freq: 587.33, len: 0.2 }, // F-A-C-D
+    { freq: 659.25, len: 0.2 }, { freq: 523.25, len: 0.2 }, { freq: 392.00, len: 0.4 }, // E-C-G (hold)
+
+    // Part C: High Energy Scales
+    { freq: 523.25, len: 0.15 }, { freq: 587.33, len: 0.15 }, { freq: 659.25, len: 0.15 }, { freq: 698.46, len: 0.15 }, // C-D-E-F (fast)
+    { freq: 783.99, len: 0.15 }, { freq: 698.46, len: 0.15 }, { freq: 659.25, len: 0.15 }, { freq: 587.33, len: 0.15 }, // G-F-E-D (fast)
+    { freq: 523.25, len: 0.2 }, { freq: 392.00, len: 0.2 }, { freq: 329.63, len: 0.2 }, { freq: 261.63, len: 0.2 }, // C-G-E-C
+    
+    // Turnaround
+    { freq: 293.66, len: 0.2 }, { freq: 392.00, len: 0.2 }, { freq: 493.88, len: 0.2 }, { freq: 587.33, len: 0.2 }, // D-G-B-D
+    { freq: 523.25, len: 0.4 }, { freq: 0, len: 0.2 } // C (End)
+  ];
+  private currentNoteIndex = 0;
+
+  private init() {
+    if (!this.ctx) {
+      this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    }
+    if (this.ctx.state === 'suspended') {
+      this.ctx.resume();
+    }
+  }
+
+  playBgm() {
+    this.init();
+    // Guard: ensure only one scheduler runs
+    if (this.isBgmPlaying || !this.ctx) return;
+    
+    this.isBgmPlaying = true;
+    this.currentNoteIndex = 0;
+    this.nextNoteTime = this.ctx.currentTime + 0.1;
+    this.scheduler();
+  }
+
+  stopBgm() {
+    this.isBgmPlaying = false;
+    if (this.timerID) window.clearTimeout(this.timerID);
+    this.bgmOscillators.forEach(osc => {
+        try { osc.stop(); osc.disconnect(); } catch(e) {}
+    });
+    this.bgmOscillators = [];
+  }
+
+  private scheduler() {
+    if (!this.isBgmPlaying || !this.ctx) return;
+    
+    // Schedule notes ahead (lookahead 0.1s)
+    while (this.nextNoteTime < this.ctx.currentTime + 0.1) {
+        this.scheduleNote(this.melody[this.currentNoteIndex], this.nextNoteTime);
+        this.nextNoteTime += this.melody[this.currentNoteIndex].len;
+        this.currentNoteIndex = (this.currentNoteIndex + 1) % this.melody.length;
+    }
+    this.timerID = window.setTimeout(() => this.scheduler(), 25);
+  }
+
+  private scheduleNote(note: {freq: number, len: number}, time: number) {
+      if (!this.ctx) return;
+      if (note.freq === 0) return; // Rest
+
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      
+      osc.type = 'triangle'; // Smooth upbeat sound
+      osc.frequency.value = note.freq;
+      
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      
+      // Envelope to make it sound plucky yet continuous
+      gain.gain.setValueAtTime(0, time);
+      gain.gain.linearRampToValueAtTime(0.08, time + 0.02); // Attack
+      gain.gain.exponentialRampToValueAtTime(0.01, time + note.len - 0.02); // Decay
+
+      osc.start(time);
+      osc.stop(time + note.len);
+      
+      this.bgmOscillators.push(osc);
+      // Cleanup old oscillators from array to prevent memory leak
+      if (this.bgmOscillators.length > 50) this.bgmOscillators.shift();
+  }
+
+  playCandySfx() {
+      this.init();
+      if (!this.ctx) return;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      
+      osc.type = 'sine';
+      // "Ding" sound: rapid high pitch slide
+      osc.frequency.setValueAtTime(880, this.ctx.currentTime); // A5
+      osc.frequency.exponentialRampToValueAtTime(1760, this.ctx.currentTime + 0.1); // A6
+      
+      gain.gain.setValueAtTime(0.1, this.ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.1);
+      
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start();
+      osc.stop(this.ctx.currentTime + 0.1);
+  }
+
+  playGameOverSfx() {
+      this.init();
+      if (!this.ctx) return;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      
+      // Punchier 8-bit crash
+      osc.type = 'square'; 
+      // Fast drop from mid to low frequency
+      osc.frequency.setValueAtTime(300, this.ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(50, this.ctx.currentTime + 0.15);
+      
+      gain.gain.setValueAtTime(0.15, this.ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.15);
+      
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start();
+      osc.stop(this.ctx.currentTime + 0.15);
+  }
+}
+
+export const audioManager = new AudioManager();
+
 export const encryptConfig = (config: any): string => {
   return CryptoJS.AES.encrypt(JSON.stringify(config), SECRET_PASSPHRASE).toString();
 };
