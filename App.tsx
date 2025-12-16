@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import GameCanvas from './components/GameCanvas';
 import { AppView, PlayerState, GameConfig, GameRecord } from './types';
 import { INITIAL_PLAYER_STATE, INITIAL_CONFIG, GAME_ITEMS, ITEM_NAMES } from './constants';
-import { loadPlayerData, savePlayerData, decryptConfig, encryptConfig, getGamingDate, drawCharacter, drawCandySimple } from './utils';
+import { loadPlayerData, savePlayerData, decryptConfig, encryptConfig, getGamingDate, drawCharacter, drawCandySimple, audioManager } from './utils';
 
 // Helper UI Component for panels
 const Panel: React.FC<{ children: React.ReactNode, title?: string, className?: string, onClose?: () => void }> = ({ children, title, className = "", onClose }) => (
@@ -52,7 +52,7 @@ const CharacterPreview: React.FC<{ player: PlayerState }> = ({ player }) => {
     );
 };
 
-const Button: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'secondary' | 'accent' | 'danger' }> = ({ children, variant = 'primary', className = "", ...props }) => {
+const Button: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'secondary' | 'accent' | 'danger' }> = ({ children, variant = 'primary', className = "", onClick, ...props }) => {
     const base = "w-full py-3 px-6 rounded-xl font-bold text-lg shadow-md transform transition active:scale-95 hover:-translate-y-0.5 flex items-center justify-center gap-2 mb-3";
     const variants = {
         primary: "bg-gradient-to-br from-amber-700 to-amber-900 text-white",
@@ -60,7 +60,14 @@ const Button: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement> & { variant
         accent: "bg-gradient-to-br from-orange-400 to-orange-600 text-white",
         danger: "bg-gradient-to-br from-red-500 to-red-700 text-white"
     };
-    return <button className={`${base} ${variants[variant]} ${className}`} {...props}>{children}</button>;
+    
+    // Wrapper for click sound
+    const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+        audioManager.playClickSfx();
+        if (onClick) onClick(e);
+    };
+
+    return <button className={`${base} ${variants[variant]} ${className}`} onClick={handleClick} {...props}>{children}</button>;
 };
 
 const App: React.FC = () => {
@@ -238,6 +245,8 @@ const App: React.FC = () => {
             const updated = { ...player, wallet: player.wallet - cost, level: player.level + 1 };
             setPlayer(updated);
             savePlayerData(updated);
+            // SFX
+            audioManager.playUpgradeSfx();
             setPurchaseFeedback({ message: "레벨업 성공!", subMessage: `점수 획득량이 Lv.${updated.level}로 증가했어요!`, icon: "fa-arrow-up" });
         } else if (player.wallet < cost) { alert("쿠키가 부족해요!"); }
     };
@@ -259,11 +268,14 @@ const App: React.FC = () => {
             const updated = { ...player, wallet: player.wallet - config.priceGacha, inventory: updatedInventory };
             setPlayer(updated);
             savePlayerData(updated);
+            // SFX
+            audioManager.playGachaSfx();
             setPurchaseFeedback({ message: "아이템 획득!", subMessage: ITEM_NAMES[picked.item], icon: "fa-gift" });
         } else { alert("쿠키가 부족해요!"); }
     };
 
     const toggleEquip = (category: 'hat' | 'weapon' | 'clothes' | 'shoes', item: string) => {
+        audioManager.playClickSfx();
         const current = player.equipped[category];
         const next = current === item ? "" : item;
         const updated = { ...player, equipped: { ...player.equipped, [category]: next } };
@@ -314,7 +326,7 @@ const App: React.FC = () => {
                                 <i className="fa-solid fa-gamepad"></i> 테스트 모드
                             </Button>
                         </div>
-                        <button onClick={() => setHelpOpen(true)} className="mt-8 text-white/60 hover:text-white underline text-sm">선생님을 위한 도움말</button>
+                        <button onClick={() => { audioManager.playClickSfx(); setHelpOpen(true); }} className="mt-8 text-white/60 hover:text-white underline text-sm">선생님을 위한 도움말</button>
                     </div>
                     {/* Help Modal */}
                     {helpOpen && (
@@ -378,7 +390,7 @@ const App: React.FC = () => {
                     </div>
                     <div className="bg-blue-50 p-4 rounded-2xl mb-6 text-blue-800 text-lg">오늘의 도전: <strong>{Math.max(0, config.dailyLimit - player.dailyPlayCount)}</strong> 회 남음</div>
                     <div className="mb-6 flex justify-center">
-                        <button onClick={() => hardModeUnlocked && setIsHardMode(!isHardMode)} className={`px-8 py-3 rounded-2xl font-black text-xl flex items-center gap-3 transition-all ${!hardModeUnlocked ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : isHardMode ? 'bg-red-500 text-white shadow-red-300 shadow-lg scale-105' : 'bg-white border-2 border-red-500 text-red-500 hover:bg-red-50'}`}>
+                        <button onClick={() => { audioManager.playClickSfx(); if(hardModeUnlocked) setIsHardMode(!isHardMode); }} className={`px-8 py-3 rounded-2xl font-black text-xl flex items-center gap-3 transition-all ${!hardModeUnlocked ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : isHardMode ? 'bg-red-500 text-white shadow-red-300 shadow-lg scale-105' : 'bg-white border-2 border-red-500 text-red-500 hover:bg-red-50'}`}>
                             {isHardMode ? <i className="fa-solid fa-fire animate-pulse"></i> : <i className="fa-solid fa-lock-open"></i>}
                             {isHardMode ? "하드 모드 ON" : "하드 모드 OFF"}
                             {!hardModeUnlocked && <span className="text-xs font-normal ml-2">(누적 1000개 필요)</span>}
@@ -454,7 +466,7 @@ const App: React.FC = () => {
                                     </div>
                                     <div className="w-[80%] flex gap-2">
                                         {['hat','weapon','clothes','shoes'].map(t => (
-                                            <button key={t} onClick={()=>setWardrobeTab(t as any)} className={`flex-1 rounded-2xl font-bold transition-all text-sm ${wardrobeTab === t ? 'bg-amber-100 text-amber-800 border-2 border-amber-200' : 'bg-gray-50 text-gray-400 border-2 border-transparent'}`}>
+                                            <button key={t} onClick={() => { audioManager.playClickSfx(); setWardrobeTab(t as any); }} className={`flex-1 rounded-2xl font-bold transition-all text-sm ${wardrobeTab === t ? 'bg-amber-100 text-amber-800 border-2 border-amber-200' : 'bg-gray-50 text-gray-400 border-2 border-transparent'}`}>
                                                 {{hat:'모자',weapon:'무기',clothes:'옷',shoes:'신발'}[t]}
                                             </button>
                                         ))}
@@ -483,7 +495,7 @@ const App: React.FC = () => {
                                         {Array.from({length: 20}).map((_, idx) => {
                                             const isUnlocked = idx <= player.level;
                                             return (
-                                                <div key={idx} onClick={() => { if(isUnlocked) { const updated = { ...player, currentCandySkin: idx }; setPlayer(updated); savePlayerData(updated); } }} className={`w-8 h-8 md:w-10 md:h-10 rounded-lg flex items-center justify-center relative cursor-pointer transition-all ${player.currentCandySkin === idx ? 'ring-2 ring-pink-500 bg-white shadow-md z-10 scale-110' : (isUnlocked ? 'bg-white/60 hover:bg-white' : 'bg-gray-200 opacity-50 cursor-not-allowed')}`}>
+                                                <div key={idx} onClick={() => { if(isUnlocked) { audioManager.playClickSfx(); const updated = { ...player, currentCandySkin: idx }; setPlayer(updated); savePlayerData(updated); } }} className={`w-8 h-8 md:w-10 md:h-10 rounded-lg flex items-center justify-center relative cursor-pointer transition-all ${player.currentCandySkin === idx ? 'ring-2 ring-pink-500 bg-white shadow-md z-10 scale-110' : (isUnlocked ? 'bg-white/60 hover:bg-white' : 'bg-gray-200 opacity-50 cursor-not-allowed')}`}>
                                                     {!isUnlocked && <i className="fa-solid fa-lock text-[10px] text-gray-400 absolute z-20"></i>}
                                                     <div className={!isUnlocked ? 'blur-[1px] opacity-40' : ''}>
                                                        <CandyIcon idx={idx} size={16} />
@@ -531,12 +543,12 @@ const App: React.FC = () => {
              {view === AppView.RECORDS && (
                 <Panel title="🏆 명예의 전당">
                     <div className="flex gap-2 mb-4 bg-gray-200 p-2 rounded-xl">
-                        <button onClick={() => setRecordTab('score')} className={`flex-1 py-3 rounded-lg font-bold text-lg transition-all ${recordTab === 'score' ? 'bg-white shadow text-amber-600' : 'text-gray-500'}`}>점수순</button>
-                        <button onClick={() => setRecordTab('time')} className={`flex-1 py-3 rounded-lg font-bold text-lg transition-all ${recordTab === 'time' ? 'bg-white shadow text-blue-600' : 'text-gray-500'}`}>생존시간순</button>
+                        <button onClick={() => { audioManager.playClickSfx(); setRecordTab('score'); }} className={`flex-1 py-3 rounded-lg font-bold text-lg transition-all ${recordTab === 'score' ? 'bg-white shadow text-amber-600' : 'text-gray-500'}`}>점수순</button>
+                        <button onClick={() => { audioManager.playClickSfx(); setRecordTab('time'); }} className={`flex-1 py-3 rounded-lg font-bold text-lg transition-all ${recordTab === 'time' ? 'bg-white shadow text-blue-600' : 'text-gray-500'}`}>생존시간순</button>
                     </div>
                      <div className="flex gap-2 mb-6">
-                        <button onClick={() => setRecordDifficultyTab('normal')} className={`flex-1 py-2 rounded-lg font-bold transition-all border-2 ${recordDifficultyTab === 'normal' ? 'bg-indigo-100 text-indigo-700 border-indigo-200' : 'bg-transparent text-gray-400 border-transparent'}`}>기본 모드</button>
-                        <button onClick={() => setRecordDifficultyTab('hard')} className={`flex-1 py-2 rounded-lg font-bold transition-all border-2 ${recordDifficultyTab === 'hard' ? 'bg-red-100 text-red-700 border-red-200' : 'bg-transparent text-gray-400 border-transparent'}`}>하드 모드</button>
+                        <button onClick={() => { audioManager.playClickSfx(); setRecordDifficultyTab('normal'); }} className={`flex-1 py-2 rounded-lg font-bold transition-all border-2 ${recordDifficultyTab === 'normal' ? 'bg-indigo-100 text-indigo-700 border-indigo-200' : 'bg-transparent text-gray-400 border-transparent'}`}>기본 모드</button>
+                        <button onClick={() => { audioManager.playClickSfx(); setRecordDifficultyTab('hard'); }} className={`flex-1 py-2 rounded-lg font-bold transition-all border-2 ${recordDifficultyTab === 'hard' ? 'bg-red-100 text-red-700 border-red-200' : 'bg-transparent text-gray-400 border-transparent'}`}>하드 모드</button>
                     </div>
                      <div className="bg-gray-50 rounded-2xl p-6 min-h-[350px] mb-8 overflow-y-auto max-h-[45vh]">
                         {player.records.filter(r => (r.difficulty || 'normal') === recordDifficultyTab).length === 0 ? 
