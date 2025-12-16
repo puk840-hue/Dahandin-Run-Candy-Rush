@@ -37,6 +37,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ playerState, config, onGameOver
     isSliding: false
   });
 
+  const jumpPressed = useRef(false); // Track if jump button is physically held
   const slidePressed = useRef(false); // Track if slide button is currently held down
 
   const ginger = useRef({ x: 100, y: 0, dy: 0, grounded: false, jumpCount: 0, rotation: 0 });
@@ -178,11 +179,23 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ playerState, config, onGameOver
   // Use robust event handling for virtual buttons
   // "key chewing" usually happens because of zoom delay or touch conflicts.
   // We use preventDefault and stopPropagation to ensure clean execution.
-  const handleJumpInput = useCallback((e: React.SyntheticEvent) => {
-      e.preventDefault();
+  // We added a specific logic (jumpPressed ref) to enforce "Press-Release" cycle.
+  const handleJumpStart = useCallback((e: React.SyntheticEvent | Event) => {
+      // Prevent default browser behavior (scrolling, zooming, mouse emulation)
+      if (e.cancelable && e.type !== 'keydown') e.preventDefault();
       e.stopPropagation();
+      
+      if (jumpPressed.current) return; // Prevent double trigger if already held
+      
+      jumpPressed.current = true;
       jumpAction();
   }, [jumpAction]);
+
+  const handleJumpEnd = useCallback((e: React.SyntheticEvent | Event) => {
+      if (e.cancelable && e.type !== 'keyup') e.preventDefault();
+      e.stopPropagation();
+      jumpPressed.current = false;
+  }, []);
 
   const handleSlideStartInput = useCallback((e: React.SyntheticEvent) => {
       e.preventDefault();
@@ -433,8 +446,25 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ playerState, config, onGameOver
 
     animationId = requestAnimationFrame(loop);
 
-    const handleKeyDown = (e: KeyboardEvent) => { if(e.code === 'Space' || e.code === 'ArrowUp') { e.preventDefault(); jumpAction(); } if(e.code === 'ArrowDown') { e.preventDefault(); slideStart(); } };
-    const handleKeyUp = (e: KeyboardEvent) => { if(e.code === 'ArrowDown') { slideEnd(); } }
+    const handleKeyDown = (e: KeyboardEvent) => { 
+        if(e.code === 'Space' || e.code === 'ArrowUp') { 
+            e.preventDefault(); 
+            // Only jump if not already pressing (enforce release)
+            if (!jumpPressed.current) {
+                jumpPressed.current = true;
+                jumpAction(); 
+            }
+        } 
+        if(e.code === 'ArrowDown') { e.preventDefault(); slideStart(); } 
+    };
+    
+    const handleKeyUp = (e: KeyboardEvent) => { 
+        if(e.code === 'Space' || e.code === 'ArrowUp') {
+            jumpPressed.current = false;
+        }
+        if(e.code === 'ArrowDown') { slideEnd(); } 
+    }
+    
     window.addEventListener('keydown', handleKeyDown); window.addEventListener('keyup', handleKeyUp);
 
     return () => { 
@@ -469,8 +499,11 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ playerState, config, onGameOver
         <div className="absolute bottom-6 right-6 z-20">
             {/* Added touch-none class and simplified handlers to prevent zoom/delay/double-tap issues */}
             <button className="w-24 h-24 md:w-32 md:h-32 bg-white/20 border-4 border-white/60 rounded-full flex items-center justify-center text-white text-3xl backdrop-blur-md shadow-2xl active:scale-95 active:bg-white/40 transition-transform touch-none" 
-                onTouchStart={handleJumpInput} 
-                onMouseDown={handleJumpInput}>
+                onTouchStart={handleJumpStart} 
+                onTouchEnd={handleJumpEnd}
+                onMouseDown={handleJumpStart} 
+                onMouseUp={handleJumpEnd}
+                onMouseLeave={handleJumpEnd}>
                 <i className="fa-solid fa-arrow-up text-4xl md:text-5xl drop-shadow-md"></i>
             </button>
         </div>

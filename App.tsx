@@ -111,6 +111,10 @@ const App: React.FC = () => {
     };
 
     const handleGenerateLink = () => {
+        if (!tempApiKey.trim()) {
+            return alert("⚠️ API 키를 입력해주세요!\n(설정이 저장되지 않았습니다)");
+        }
+
         const newConfig = { ...config, api: tempApiKey };
         setConfig(newConfig);
 
