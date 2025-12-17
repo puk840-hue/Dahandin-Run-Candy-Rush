@@ -86,6 +86,9 @@ const App: React.FC = () => {
     const [config, setConfig] = useState<GameConfig>(INITIAL_CONFIG);
     const [tempApiKey, setTempApiKey] = useState("");
     
+    // New state to track if entered via Magic Link
+    const [isMagicLink, setIsMagicLink] = useState(false);
+
     const [isHardMode, setIsHardMode] = useState(false);
     const [purchaseFeedback, setPurchaseFeedback] = useState<{ message: string, subMessage?: string, color?: string, icon?: string } | null>(null);
     const [gameId, setGameId] = useState(0); 
@@ -106,7 +109,8 @@ const App: React.FC = () => {
             if (loadedConfig) {
                 setConfig(prev => ({ ...prev, ...loadedConfig }));
                 setTempApiKey(loadedConfig.api || "");
-                setView(AppView.LOGIN);
+                setIsMagicLink(true); // Mark as magic link user
+                setView(AppView.INTRO); // Go to Intro first, not Login
             } else {
                 alert("잘못된 링크입니다.");
                 window.location.search = "";
@@ -118,6 +122,10 @@ const App: React.FC = () => {
 
     const handleTeacherLogin = () => {
         setView(AppView.TEACHER);
+    };
+
+    const handleStudentStart = () => {
+        setView(AppView.LOGIN);
     };
 
     const handleGenerateLink = () => {
@@ -177,7 +185,12 @@ const App: React.FC = () => {
                 const today = getGamingDate();
                 let dailyPlay = loaded?.dailyPlayCount || 0;
                 let dailyShop = loaded?.dailyShopCount || 0;
-                if (loaded?.lastGamingDate !== today) { dailyPlay = 0; dailyShop = 0; }
+                
+                // Reset daily counts if date changed (8AM check in getGamingDate)
+                if (loaded?.lastGamingDate !== today) { 
+                    dailyPlay = 0; 
+                    dailyShop = 0; 
+                }
 
                 const currentCandySkin = (typeof loaded?.currentCandySkin === 'number') ? loaded.currentCandySkin : 0;
                 const inventory = loaded?.inventory || INITIAL_PLAYER_STATE.inventory;
@@ -255,9 +268,19 @@ const App: React.FC = () => {
     };
 
     const buyUpgrade = () => {
+        // Check shop limit
+        if (player.mode === 'student' && player.dailyShopCount >= config.shopLimit) {
+            return alert("오늘의 상점 이용 횟수를 모두 사용했어요!");
+        }
+
         const cost = player.level * config.priceUpgrade;
         if (player.wallet >= cost && player.level < 20) {
-            const updated = { ...player, wallet: player.wallet - cost, level: player.level + 1 };
+            const updated = { 
+                ...player, 
+                wallet: player.wallet - cost, 
+                level: player.level + 1,
+                dailyShopCount: player.mode === 'student' ? player.dailyShopCount + 1 : player.dailyShopCount
+            };
             setPlayer(updated);
             savePlayerData(updated);
             // SFX
@@ -267,6 +290,11 @@ const App: React.FC = () => {
     };
 
     const buyGacha = () => {
+        // Check shop limit
+        if (player.mode === 'student' && player.dailyShopCount >= config.shopLimit) {
+            return alert("오늘의 상점 이용 횟수를 모두 사용했어요!");
+        }
+
         if (player.wallet >= config.priceGacha) {
             const missing: {cat: string, item: string}[] = [];
             GAME_ITEMS.hats.forEach(i => { if(!player.inventory.hats.includes(i)) missing.push({cat:'hats', item:i}) });
@@ -280,7 +308,12 @@ const App: React.FC = () => {
             // @ts-ignore
             updatedInventory[picked.cat] = [...updatedInventory[picked.cat], picked.item];
 
-            const updated = { ...player, wallet: player.wallet - config.priceGacha, inventory: updatedInventory };
+            const updated = { 
+                ...player, 
+                wallet: player.wallet - config.priceGacha, 
+                inventory: updatedInventory,
+                dailyShopCount: player.mode === 'student' ? player.dailyShopCount + 1 : player.dailyShopCount
+            };
             setPlayer(updated);
             savePlayerData(updated);
             // SFX
@@ -369,17 +402,28 @@ const App: React.FC = () => {
 
                         {/* Action Buttons */}
                         <div className="flex flex-col gap-4 w-full max-w-xs">
-                             <button onClick={handleTeacherLogin} className="group relative w-full py-5 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold text-xl shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all overflow-hidden">
+                             <button onClick={handleStudentStart} className="group relative w-full py-5 rounded-2xl bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-bold text-xl shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all overflow-hidden">
                                 <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
                                 <div className="relative flex items-center justify-center gap-3">
-                                    <span className="bg-white/20 p-2 rounded-lg"><i className="fa-solid fa-chalkboard-user"></i></span>
-                                    <span>선생님 시작하기</span>
+                                    <span className="bg-white/20 p-2 rounded-lg"><i className="fa-solid fa-user-graduate"></i></span>
+                                    <span>학생 시작하기</span>
                                 </div>
                             </button>
                             
-                            <button onClick={handleTestMode} className="w-full py-4 rounded-2xl bg-white/5 border-2 border-white/10 text-gray-300 font-bold text-lg hover:bg-white/10 hover:text-white hover:border-white/30 transition-all flex items-center justify-center gap-2">
-                                <i className="fa-solid fa-gamepad"></i> 테스트 모드로 체험하기
-                            </button>
+                            {!isMagicLink && (
+                                <>
+                                    <button onClick={handleTeacherLogin} className="group relative w-full py-4 rounded-2xl bg-white/10 text-white font-bold text-lg hover:bg-white/20 transition-all border border-white/10">
+                                        <div className="relative flex items-center justify-center gap-2">
+                                            <i className="fa-solid fa-chalkboard-user"></i>
+                                            <span>선생님 시작하기</span>
+                                        </div>
+                                    </button>
+                                    
+                                    <button onClick={handleTestMode} className="w-full py-4 rounded-2xl bg-white/5 border-2 border-white/10 text-gray-400 font-bold text-lg hover:bg-white/10 hover:text-white hover:border-white/30 transition-all flex items-center justify-center gap-2">
+                                        <i className="fa-solid fa-gamepad"></i> 테스트 모드로 체험하기
+                                    </button>
+                                </>
+                            )}
                         </div>
 
                         {/* Footer Info */}
@@ -445,7 +489,7 @@ const App: React.FC = () => {
                 <Panel title="🚀 학생 로그인">
                     <input id="studentCode" type="text" placeholder="학생 코드를 입력하세요" className="w-full p-6 border-2 border-gray-200 rounded-2xl text-2xl mb-8 text-center font-bold" />
                     <Button onClick={handleStudentLogin} variant="primary" className="text-2xl py-5">로그인</Button>
-                    <Button onClick={() => window.location.search = ""} variant="secondary">뒤로가기</Button>
+                    <Button onClick={() => setView(AppView.INTRO)} variant="secondary">뒤로가기</Button>
                 </Panel>
             )}
 
@@ -462,7 +506,10 @@ const App: React.FC = () => {
                             <div className="text-4xl font-black text-purple-600">{player.totalCandies} <span className="text-lg">개</span></div>
                         </div>
                     </div>
-                    <div className="bg-blue-50 p-4 rounded-2xl mb-6 text-blue-800 text-lg">오늘의 도전: <strong>{Math.max(0, config.dailyLimit - player.dailyPlayCount)}</strong> 회 남음</div>
+                    <div className="bg-blue-50 p-4 rounded-2xl mb-6 text-blue-800 text-lg">
+                        오늘의 도전: <strong>{Math.max(0, config.dailyLimit - player.dailyPlayCount)}</strong> / {config.dailyLimit} 회<br/>
+                        상점 이용: <strong>{Math.max(0, config.shopLimit - player.dailyShopCount)}</strong> / {config.shopLimit} 회
+                    </div>
                     <div className="mb-6 flex justify-center">
                         <button onClick={() => { audioManager.playClickSfx(); if(hardModeUnlocked) setIsHardMode(!isHardMode); }} className={`px-8 py-3 rounded-2xl font-black text-xl flex items-center gap-3 transition-all ${!hardModeUnlocked ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : isHardMode ? 'bg-red-500 text-white shadow-red-300 shadow-lg scale-105' : 'bg-white border-2 border-red-500 text-red-500 hover:bg-red-50'}`}>
                             {isHardMode ? <i className="fa-solid fa-fire animate-pulse"></i> : <i className="fa-solid fa-lock-open"></i>}
@@ -476,13 +523,16 @@ const App: React.FC = () => {
                         <Button onClick={() => setView(AppView.WARDROBE)} variant="secondary" className="text-xl bg-purple-500 text-white"><i className="fa-solid fa-shirt"></i> 옷장</Button>
                     </div>
                     <Button onClick={() => setView(AppView.RECORDS)} variant="secondary" className="mt-4 text-xl"><i className="fa-solid fa-trophy"></i> 명예의 전당</Button>
-                    <Button onClick={() => setView(AppView.INTRO)} variant="danger" className="mt-6 text-lg">나가기</Button>
+                    {!isMagicLink && <Button onClick={() => setView(AppView.INTRO)} variant="danger" className="mt-6 text-lg">나가기</Button>}
                 </Panel>
             )}
 
             {/* Shop View */}
             {view === AppView.SHOP && (
                 <Panel title="🛒 아이템 상점" className="max-w-4xl">
+                    <div className="text-gray-500 font-bold mb-4 text-center bg-gray-100 py-2 rounded-xl">
+                        오늘 상점 이용 가능 횟수: <span className="text-pink-600">{Math.max(0, config.shopLimit - player.dailyShopCount)}</span> / {config.shopLimit}
+                    </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
                         <div className="bg-white p-6 rounded-3xl shadow-lg border-2 border-gray-100 flex flex-col items-center hover:-translate-y-1 transition-transform">
                             <div className="w-24 h-24 bg-amber-100 rounded-full flex items-center justify-center mb-4 text-5xl">⚡</div>
