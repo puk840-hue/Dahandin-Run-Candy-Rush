@@ -95,7 +95,8 @@ export const INITIAL_CONFIG = {
     shopLimit: 1,
     hardModeEntryCost: 100, // Cost per play
     exchangeRate: 10,   // 10 Candies = 1 Cookie
-    globalResetTimestamp: 0
+    globalResetTimestamp: 0,
+    hardResetTimestamp: 0
 };
 
 export const ACHIEVEMENTS: Achievement[] = [

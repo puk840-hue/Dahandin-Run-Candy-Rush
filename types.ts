@@ -69,7 +69,7 @@ export interface PlayerState {
   
   unlockedSkins: string[];
   currentSkin: string; 
-  currentCandySkin: number; // Changed to Index (0-19)
+  currentCandySkin: number; // Index (0-19)
   
   inventory: PlayerInventory;
   equipped: PlayerEquipped;
@@ -80,11 +80,11 @@ export interface PlayerState {
   stats: PlayerStats; // Cumulative stats for achievements
 
   records: GameRecord[];
-  logs: TransactionLog[]; // New: Transaction History
+  logs: TransactionLog[]; // Transaction History
   dailyPlayCount: number;
   dailyShopCount: number;
   lastGamingDate: string;
-  lastGlobalReset?: number; // New: For teacher forced reset
+  lastGlobalReset?: number; // For teacher forced reset (Daily/Hard)
 }
 
 export interface GameConfig {
@@ -95,9 +95,10 @@ export interface GameConfig {
   priceGacha: number;
   dailyLimit: number;
   shopLimit: number;
-  hardModeEntryCost: number; // New: Cost per play for Hard Mode
-  exchangeRate: number; // New: Candies needed for 1 Cookie
-  globalResetTimestamp: number; // New: Timestamp to force reset student counts
+  hardModeEntryCost: number; 
+  exchangeRate: number; 
+  globalResetTimestamp: number; // Timestamp for Daily Count Reset
+  hardResetTimestamp?: number; // New: Timestamp for Full Data Reset (except Cookie)
 }
 
 export interface GameObject {

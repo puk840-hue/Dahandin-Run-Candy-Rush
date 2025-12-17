@@ -113,6 +113,9 @@ const App: React.FC = () => {
     const [showGameModeSelect, setShowGameModeSelect] = useState(false);
     const [showTitleSelect, setShowTitleSelect] = useState(false);
 
+    // Teacher Reset State
+    const [isResetChecked, setIsResetChecked] = useState(false);
+
     // Initialization
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
@@ -205,11 +208,13 @@ const App: React.FC = () => {
         navigator.clipboard.writeText(link).then(() => alert("✨ 학생용 매직 링크가 복사되었습니다!"));
     };
 
-    const handleResetAllCounts = () => {
-        if (window.confirm("정말 모든 학생의 도전 횟수와 상점 이용 횟수를 초기화하시겠습니까?\n(매직 링크로 접속한 학생들에게 적용됩니다)")) {
-            const newConfig = { ...config, globalResetTimestamp: Date.now() };
+    const handleHardReset = () => {
+        if (!isResetChecked) return alert("데이터 초기화에 동의해주세요.");
+
+        if (window.confirm("❗ 경고: 모든 학생의 데이터가 초기화됩니다.\n\n[초기화 항목]\n- 레벨, 캔디, 칭호\n- 보유 아이템, 착용 장비\n- 게임 기록, 통계\n\n[유지 항목]\n- 보유 쿠키(지갑)\n\n계속하시겠습니까?")) {
+            const newConfig = { ...config, hardResetTimestamp: Date.now() };
             setConfig(newConfig);
-            alert("초기화 설정이 적용되었습니다. '설정 저장 및 매직 링크 복사'를 눌러 학생들에게 공유해주세요.");
+            alert("초기화 설정이 완료되었습니다. '설정 저장 및 매직 링크 복사'를 눌러 학생들에게 공유해주세요.");
         }
     }
 
@@ -251,49 +256,51 @@ const App: React.FC = () => {
             if (success) {
                 const loaded = loadPlayerData(codeInput);
                 const today = getGamingDate();
-                let dailyPlay = loaded?.dailyPlayCount || 0;
-                let dailyShop = loaded?.dailyShopCount || 0;
-                let lastReset = loaded?.lastGlobalReset || 0;
                 
-                // Teacher forced reset logic
-                if (config.globalResetTimestamp > lastReset) {
-                    dailyPlay = 0;
-                    dailyShop = 0;
-                    lastReset = config.globalResetTimestamp;
-                    alert("선생님이 오늘의 횟수를 초기화해주셨어요! 🎉");
-                }
+                // --- Reset Logic Handling ---
+                const serverHardResetTime = config.hardResetTimestamp || 0;
+                const playerLastResetTime = loaded?.lastGlobalReset || 0;
 
-                // Reset daily counts if date changed (8AM check in getGamingDate)
-                if (loaded?.lastGamingDate !== today) { 
-                    dailyPlay = 0; 
-                    dailyShop = 0; 
+                let playerStateToUse: Partial<PlayerState> = loaded || {};
+
+                // 1. HARD RESET Check (Teacher forced full wipe except wallet)
+                if (serverHardResetTime > playerLastResetTime) {
+                    alert("📢 선생님 요청으로 데이터가 초기화되었습니다. (쿠키 제외)");
+                    // Wipe everything except wallet-related info
+                    playerStateToUse = {
+                        ...INITIAL_PLAYER_STATE,
+                        wallet: loaded?.wallet ?? 0, // Keep loaded wallet if exists
+                        logs: loaded?.logs ?? [], // Keep logs
+                        lastGlobalReset: serverHardResetTime // Update timestamp to prevent loop
+                    };
+                } 
+                
+                // 2. DAILY RESET Check (Local logic or Server Daily Reset)
+                if (playerStateToUse.lastGamingDate !== today) {
+                    playerStateToUse.dailyPlayCount = 0;
+                    playerStateToUse.dailyShopCount = 0;
+                    playerStateToUse.lastGamingDate = today;
                 }
 
                 // Construct new player state
-                // Prioritize API wallet if available, otherwise use loaded or default
-                const initialWallet = config.api ? fetchedWallet : (loaded?.wallet ?? 100);
+                const initialWallet = config.api ? fetchedWallet : (playerStateToUse.wallet ?? 100);
 
                 const newPlayerState: PlayerState = {
                     ...INITIAL_PLAYER_STATE,
+                    ...playerStateToUse, // Apply loaded/reset state
                     mode: 'student',
                     code: codeInput,
                     name: fetchedName,
-                    ...loaded, // Load saved state (inventory, records, etc.)
-                    wallet: initialWallet, // Ensure API wallet takes precedence if applicable
-                    totalCandies: loaded?.totalCandies || 0,
-                    dailyPlayCount: dailyPlay,
-                    dailyShopCount: dailyShop,
-                    lastGamingDate: today,
-                    lastGlobalReset: lastReset,
-                    // Ensure stats structure exists if loading from old version
-                    stats: { ...INITIAL_PLAYER_STATE.stats, ...(loaded?.stats || {}) },
-                    unlockedTitles: loaded?.unlockedTitles || [],
-                    activeTitle: loaded?.activeTitle || null
+                    wallet: initialWallet, // API wallet priority
+                    // Ensure stats structure matches
+                    stats: { ...INITIAL_PLAYER_STATE.stats, ...(playerStateToUse.stats || {}) },
+                    unlockedTitles: playerStateToUse.unlockedTitles || [],
+                    activeTitle: playerStateToUse.activeTitle || null
                 };
 
                 setPlayer(newPlayerState);
                 
-                // CRITICAL: Save immediately to persist the "reset" state (date/counts)
+                // CRITICAL: Save immediately
                 savePlayerData(newPlayerState);
                 
                 // Instead of going directly to Lobby, show Tutorial
@@ -409,7 +416,7 @@ const App: React.FC = () => {
         setPlayer(updatedPlayer);
         savePlayerData(updatedPlayer);
         
-        checkAchievements(updatedPlayer); // Check All Stats-based Achievements
+        checkAchievements(updatedPlayer); // Check All Stats-based Achievements (ONLY PLACE for gameplay stats)
 
         setGameOverModalOpen(true);
     };
@@ -431,8 +438,7 @@ const App: React.FC = () => {
             // *Correction*: We DO need to update `totalCandies` persisted in case of crash.
             savePlayerData(next); 
             
-            // Check achievement on threshold (optional, but good for feedback)
-            if (newStats.totalCandiesCollected === 300) checkAchievements(next);
+            // REMOVED: checkAchievements(next) to ensure titles are only awarded at Game Over
             
             return next;
         });
@@ -735,7 +741,15 @@ const App: React.FC = () => {
                             <div><label className="block text-xl font-bold text-white mb-3"><i className="fa-solid fa-right-left mr-2 text-yellow-500"></i>캔디 환율 (캔디 N개 = 쿠키 1개)</label><input type="number" className="w-full h-14 px-4 text-xl border-2 border-slate-600 bg-slate-800 text-white rounded-2xl" value={config.exchangeRate} onChange={(e) => setConfig({...config, exchangeRate: parseInt(e.target.value)})} /></div>
                         </div>
                         <div className="pt-6 border-t border-slate-700 flex flex-col gap-3">
-                            <Button onClick={handleResetAllCounts} variant="danger" className="text-xl py-4 !bg-red-900/50 hover:!bg-red-800 border border-red-500/50 text-red-100">🔥 모든 학생 횟수 초기화</Button>
+                            <div className="bg-red-900/30 border border-red-500/30 p-6 rounded-2xl mb-4">
+                                <h3 className="text-red-400 font-bold text-xl mb-3"><i className="fa-solid fa-triangle-exclamation mr-2"></i>데이터 초기화</h3>
+                                <div className="flex items-center gap-3 mb-4">
+                                    <input type="checkbox" id="resetCheck" checked={isResetChecked} onChange={(e) => setIsResetChecked(e.target.checked)} className="w-6 h-6 rounded border-red-500 bg-slate-800 text-red-600 focus:ring-red-500" />
+                                    <label htmlFor="resetCheck" className="text-white text-lg">모든 학생 데이터 초기화에 동의합니다 (쿠키 제외)</label>
+                                </div>
+                                <Button onClick={handleHardReset} variant="danger" disabled={!isResetChecked} className={`text-xl py-4 !bg-red-900/50 hover:!bg-red-800 border border-red-500/50 text-red-100 ${!isResetChecked ? 'opacity-50 cursor-not-allowed' : ''}`}>🔥 전체 초기화 실행 (복구 불가)</Button>
+                            </div>
+                            
                             <Button onClick={handleGenerateLink} variant="accent" className="text-xl py-4">✨ 설정 저장 및 매직 링크 복사</Button>
                             <Button onClick={() => setView(AppView.INTRO)} variant="secondary" className="text-xl py-4 !bg-slate-700 !text-gray-300 hover:!bg-slate-600">뒤로가기</Button>
                         </div>

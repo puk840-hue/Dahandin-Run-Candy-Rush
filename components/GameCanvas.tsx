@@ -53,7 +53,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ playerState, config, onGameOver
   const jumpPressed = useRef(false); // Track if jump button is physically held
   const slidePressed = useRef(false); // Track if slide button is currently held down
 
-  const ginger = useRef({ x: 100, y: 0, dy: 0, grounded: false, jumpCount: 0, rotation: 0 });
+  // Initialize character at X=150 to clear the slide button area
+  const ginger = useRef({ x: 150, y: 0, dy: 0, grounded: false, jumpCount: 0, rotation: 0 });
   const objects = useRef<GameObject[]>([]);
   const particles = useRef<Particle[]>([]);
   const clouds = useRef<Cloud[]>([]);
