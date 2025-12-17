@@ -264,14 +264,15 @@ const App: React.FC = () => {
                 let playerStateToUse: Partial<PlayerState> = loaded || {};
 
                 // 1. HARD RESET Check (Teacher forced full wipe except wallet)
-                if (serverHardResetTime > playerLastResetTime) {
+                // Fix: Ensure we compare timestamps correctly so we don't reset repeatedly
+                if (serverHardResetTime > 0 && serverHardResetTime > playerLastResetTime) {
                     alert("📢 선생님 요청으로 데이터가 초기화되었습니다. (쿠키 제외)");
                     // Wipe everything except wallet-related info
                     playerStateToUse = {
                         ...INITIAL_PLAYER_STATE,
                         wallet: loaded?.wallet ?? 0, // Keep loaded wallet if exists
                         logs: loaded?.logs ?? [], // Keep logs
-                        lastGlobalReset: serverHardResetTime // Update timestamp to prevent loop
+                        lastGlobalReset: serverHardResetTime // Update timestamp locally
                     };
                 } 
                 
@@ -295,7 +296,8 @@ const App: React.FC = () => {
                     // Ensure stats structure matches
                     stats: { ...INITIAL_PLAYER_STATE.stats, ...(playerStateToUse.stats || {}) },
                     unlockedTitles: playerStateToUse.unlockedTitles || [],
-                    activeTitle: playerStateToUse.activeTitle || null
+                    activeTitle: playerStateToUse.activeTitle || null,
+                    lastGlobalReset: playerStateToUse.lastGlobalReset || 0 // Persist logic
                 };
 
                 setPlayer(newPlayerState);
@@ -432,14 +434,7 @@ const App: React.FC = () => {
                 totalCandies: prev.totalCandies + amount,
                 stats: newStats
             };
-            // Optimization: Don't save on every candy pickup to reduce I/O, rely on game over save or periodic
-            // But we must save for achievements check if we want instant feedback? 
-            // For performance, let's just update state and save on Game Over.
-            // *Correction*: We DO need to update `totalCandies` persisted in case of crash.
             savePlayerData(next); 
-            
-            // REMOVED: checkAchievements(next) to ensure titles are only awarded at Game Over
-            
             return next;
         });
     };
@@ -747,6 +742,7 @@ const App: React.FC = () => {
                                     <input type="checkbox" id="resetCheck" checked={isResetChecked} onChange={(e) => setIsResetChecked(e.target.checked)} className="w-6 h-6 rounded border-red-500 bg-slate-800 text-red-600 focus:ring-red-500" />
                                     <label htmlFor="resetCheck" className="text-white text-lg">모든 학생 데이터 초기화에 동의합니다 (쿠키 제외)</label>
                                 </div>
+                                <p className="text-gray-400 text-sm mb-4 bg-black/20 p-3 rounded-lg"><i className="fa-solid fa-circle-info mr-2"></i>초기화 시 <strong>새로운 API 키 발급</strong>을 권장합니다. 기존 키 유지 시 일부 학생의 캐시된 데이터가 남을 수 있습니다.</p>
                                 <Button onClick={handleHardReset} variant="danger" disabled={!isResetChecked} className={`text-xl py-4 !bg-red-900/50 hover:!bg-red-800 border border-red-500/50 text-red-100 ${!isResetChecked ? 'opacity-50 cursor-not-allowed' : ''}`}>🔥 전체 초기화 실행 (복구 불가)</Button>
                             </div>
                             

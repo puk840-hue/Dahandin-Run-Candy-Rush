@@ -278,10 +278,15 @@ export const savePlayerData = (state: PlayerState) => {
     inventory: state.inventory,
     equipped: state.equipped,
     records: state.records,
-    logs: state.logs, // Save logs
+    logs: state.logs,
     dailyPlayCount: state.dailyPlayCount,
     dailyShopCount: state.dailyShopCount,
-    lastGamingDate: state.lastGamingDate
+    lastGamingDate: state.lastGamingDate,
+    // Fix: Added missing fields to persistence
+    activeTitle: state.activeTitle,
+    unlockedTitles: state.unlockedTitles,
+    stats: state.stats,
+    lastGlobalReset: state.lastGlobalReset
   };
   localStorage.setItem(`${STORAGE_KEY}_${state.code}`, JSON.stringify(dataToSave));
 };

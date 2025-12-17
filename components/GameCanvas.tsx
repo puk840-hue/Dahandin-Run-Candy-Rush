@@ -419,11 +419,15 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ playerState, config, onGameOver
             if(o.type === 'candy') {
                 drawCandySimple(ctx, o.x, o.y, o.r || 20, o.candyIdx || 0);
                 if(Math.hypot(ginger.current.x - o.x, (ginger.current.y - 30) - o.y) < 60) {
-                    const pts = 1 * playerStateRef.current.level; 
-                    gameState.current.score += pts;
+                    const scorePts = 1 * playerStateRef.current.level; 
+                    // Update Game Score (Leaderboard) based on Level
+                    gameState.current.score += scorePts;
                     setHudScore(gameState.current.score);
-                    onAddScoreRef.current(pts);
-                    particles.current.push({ x: o.x, y: o.y, type: 'score', text: `+${pts}`, life: 50, dy: -1 });
+
+                    // Update Currency (Wallet) -> ALWAYS +1 per candy regardless of level
+                    onAddScoreRef.current(1);
+                    
+                    particles.current.push({ x: o.x, y: o.y, type: 'score', text: `+${scorePts}`, life: 50, dy: -1 });
                     
                     // SFX: Candy
                     audioManager.playCandySfx();
