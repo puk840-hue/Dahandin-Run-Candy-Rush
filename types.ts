@@ -20,6 +20,13 @@ export interface GameRecord {
   difficulty?: 'normal' | 'hard';
 }
 
+export interface TransactionLog {
+  id: string;
+  date: string;
+  desc: string;
+  amount: number; // negative for spend, positive for gain
+}
+
 export interface PlayerInventory {
   hats: string[];
   weapons: string[];
@@ -50,6 +57,7 @@ export interface PlayerState {
   equipped: PlayerEquipped;
 
   records: GameRecord[];
+  logs: TransactionLog[]; // New: Transaction History
   dailyPlayCount: number;
   dailyShopCount: number;
   lastGamingDate: string;

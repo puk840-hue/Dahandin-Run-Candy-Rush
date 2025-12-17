@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import GameCanvas from './components/GameCanvas';
-import { AppView, PlayerState, GameConfig, GameRecord } from './types';
+import { AppView, PlayerState, GameConfig, GameRecord, TransactionLog } from './types';
 import { INITIAL_PLAYER_STATE, INITIAL_CONFIG, GAME_ITEMS, ITEM_NAMES } from './constants';
 import { loadPlayerData, savePlayerData, decryptConfig, encryptConfig, getGamingDate, drawCharacter, drawCandySimple, audioManager } from './utils';
 
@@ -99,6 +99,7 @@ const App: React.FC = () => {
     const [recordDifficultyTab, setRecordDifficultyTab] = useState<'normal' | 'hard'>('normal');
     const [wardrobeTab, setWardrobeTab] = useState<'hat' | 'weapon' | 'clothes' | 'shoes'>('hat');
     const [helpOpen, setHelpOpen] = useState(false);
+    const [showWalletLog, setShowWalletLog] = useState(false);
 
     // Initialization
     useEffect(() => {
@@ -196,6 +197,7 @@ const App: React.FC = () => {
                 const inventory = loaded?.inventory || INITIAL_PLAYER_STATE.inventory;
                 const equipped = loaded?.equipped || INITIAL_PLAYER_STATE.equipped;
                 const totalCandies = loaded?.totalCandies || 0; 
+                const logs = loaded?.logs || [];
 
                 setPlayer({
                     ...INITIAL_PLAYER_STATE,
@@ -208,6 +210,7 @@ const App: React.FC = () => {
                     currentCandySkin,
                     inventory,
                     equipped,
+                    logs,
                     dailyPlayCount: dailyPlay,
                     dailyShopCount: dailyShop,
                     lastGamingDate: today
@@ -275,10 +278,19 @@ const App: React.FC = () => {
 
         const cost = player.level * config.priceUpgrade;
         if (player.wallet >= cost && player.level < 20) {
+            // Log Transaction
+            const newLog: TransactionLog = {
+                id: Date.now().toString(),
+                date: new Date().toLocaleString(),
+                desc: `레벨 업 (Lv.${player.level} -> Lv.${player.level + 1})`,
+                amount: -cost
+            };
+
             const updated = { 
                 ...player, 
                 wallet: player.wallet - cost, 
                 level: player.level + 1,
+                logs: [newLog, ...(player.logs || [])],
                 dailyShopCount: player.mode === 'student' ? player.dailyShopCount + 1 : player.dailyShopCount
             };
             setPlayer(updated);
@@ -308,10 +320,19 @@ const App: React.FC = () => {
             // @ts-ignore
             updatedInventory[picked.cat] = [...updatedInventory[picked.cat], picked.item];
 
+             // Log Transaction
+             const newLog: TransactionLog = {
+                id: Date.now().toString(),
+                date: new Date().toLocaleString(),
+                desc: `아이템 뽑기 (${ITEM_NAMES[picked.item]})`,
+                amount: -config.priceGacha
+            };
+
             const updated = { 
                 ...player, 
                 wallet: player.wallet - config.priceGacha, 
                 inventory: updatedInventory,
+                logs: [newLog, ...(player.logs || [])],
                 dailyShopCount: player.mode === 'student' ? player.dailyShopCount + 1 : player.dailyShopCount
             };
             setPlayer(updated);
@@ -389,14 +410,13 @@ const App: React.FC = () => {
                     <div className="w-full md:w-[30%] h-[50%] md:h-full bg-black/30 backdrop-blur-xl border-l border-white/10 flex flex-col items-center justify-center p-8 z-20 shadow-2xl relative">
                         {/* Title Group */}
                         <div className="mb-10 text-center group">
-                            <div className="relative inline-block">
+                            <div className="relative inline-block flex flex-col gap-2">
                                 <h1 className="text-6xl md:text-7xl font-black text-transparent bg-clip-text bg-gradient-to-br from-amber-300 via-orange-400 to-red-500 drop-shadow-2xl tracking-tighter" style={{ textShadow: '0 4px 20px rgba(255, 160, 0, 0.5)' }}>
                                     다했니 런
                                 </h1>
-                                <div className="absolute -inset-1 bg-amber-400 blur-[40px] opacity-20 group-hover:opacity-40 transition-opacity"></div>
-                            </div>
-                            <div className="mt-3 inline-block px-4 py-1 rounded-full bg-white/10 border border-white/20">
-                                <span className="text-sm md:text-base font-bold text-white tracking-[0.2em] drop-shadow-md">REMASTERED</span>
+                                <span className="block text-4xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-br from-white via-gray-200 to-gray-400 tracking-widest mt-2" style={{ textShadow: '0 0 20px rgba(255,255,255,0.3)' }}>
+                                    리마스터
+                                </span>
                             </div>
                         </div>
 
@@ -412,7 +432,7 @@ const App: React.FC = () => {
                             
                             {!isMagicLink && (
                                 <>
-                                    <button onClick={handleTeacherLogin} className="group relative w-full py-4 rounded-2xl bg-white/10 text-white font-bold text-lg hover:bg-white/20 transition-all border border-white/10">
+                                    <button onClick={handleTeacherLogin} className="group relative w-full py-4 rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white font-bold text-lg hover:shadow-xl hover:-translate-y-0.5 transition-all border border-white/10">
                                         <div className="relative flex items-center justify-center gap-2">
                                             <i className="fa-solid fa-chalkboard-user"></i>
                                             <span>선생님 시작하기</span>
@@ -497,15 +517,47 @@ const App: React.FC = () => {
                 <Panel>
                     <h2 className="text-3xl font-bold text-gray-800 mb-6">안녕, {player.name}!</h2>
                     <div className="flex gap-4 mb-8">
-                        <div className="flex-1 bg-orange-100 p-6 rounded-3xl shadow-inner">
+                        <div className="flex-1 bg-orange-100 p-6 rounded-3xl shadow-inner cursor-pointer hover:bg-orange-200 transition-colors relative group" onClick={() => setShowWalletLog(true)}>
                             <div className="text-orange-800 font-bold flex items-center justify-center gap-3 text-xl mb-2"><i className="fa-solid fa-wallet"></i> 내 지갑</div>
                             <div className="text-4xl font-black text-orange-600">{player.wallet} <span className="text-lg">쿠키</span></div>
+                            <div className="absolute top-2 right-2 text-orange-400 opacity-50 group-hover:opacity-100"><i className="fa-solid fa-list-ul"></i></div>
                         </div>
                         <div className="flex-1 bg-purple-100 p-6 rounded-3xl shadow-inner">
                              <div className="text-purple-800 font-bold flex items-center justify-center gap-3 text-xl mb-2"><i className="fa-solid fa-candy-cane"></i> 누적 획득</div>
                             <div className="text-4xl font-black text-purple-600">{player.totalCandies} <span className="text-lg">개</span></div>
                         </div>
                     </div>
+                    
+                    {showWalletLog && (
+                         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setShowWalletLog(false)}>
+                            <div className="bg-white p-6 rounded-3xl w-[90%] max-w-lg shadow-2xl overflow-hidden max-h-[70vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                                <div className="flex justify-between items-center mb-4">
+                                    <h3 className="text-2xl font-bold text-gray-800">📜 쿠키 사용 내역</h3>
+                                    <button onClick={() => setShowWalletLog(false)} className="text-gray-400 hover:text-gray-600"><i className="fa-solid fa-xmark text-2xl"></i></button>
+                                </div>
+                                <div className="overflow-y-auto flex-1 no-scrollbar pr-2">
+                                    {(player.logs && player.logs.length > 0) ? (
+                                        <div className="space-y-3">
+                                            {player.logs.map((log) => (
+                                                <div key={log.id} className="bg-gray-50 p-3 rounded-xl flex justify-between items-center border border-gray-100">
+                                                    <div className="text-left">
+                                                        <div className="font-bold text-gray-800">{log.desc}</div>
+                                                        <div className="text-xs text-gray-400">{log.date}</div>
+                                                    </div>
+                                                    <div className={`font-bold text-lg ${log.amount > 0 ? 'text-green-500' : 'text-red-500'}`}>
+                                                        {log.amount > 0 ? '+' : ''}{log.amount}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div className="py-10 text-gray-400 text-center">아직 사용 내역이 없습니다.</div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     <div className="bg-blue-50 p-4 rounded-2xl mb-6 text-blue-800 text-lg">
                         오늘의 도전: <strong>{Math.max(0, config.dailyLimit - player.dailyPlayCount)}</strong> / {config.dailyLimit} 회<br/>
                         상점 이용: <strong>{Math.max(0, config.shopLimit - player.dailyShopCount)}</strong> / {config.shopLimit} 회

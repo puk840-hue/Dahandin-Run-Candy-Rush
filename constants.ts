@@ -9,17 +9,21 @@ export const CANDY_TYPES = ['basic', 'striped', 'lollipop', 'wrapped'];
 export const CANDY_COLORS = ['#ef5350', '#ffca28', '#66bb6a', '#42a5f5', '#ab47bc']; // Red, Yellow, Green, Blue, Purple
 
 export const GAME_ITEMS = {
-    hats: ["cap", "crown", "tophat", "helmet", "beret", "partyhat"],
-    weapons: ["sword", "wand", "lollipop", "hammer", "bow", "shield"],
-    clothes: ["overalls", "suit", "dress", "hoodie", "tuxedo", "raincoat"],
-    shoes: ["boots", "sneakers", "slippers", "heels", "sandals", "skates"]
+    hats: ["cap", "crown", "tophat", "helmet", "beret", "partyhat", "headphone", "flower", "viking"],
+    weapons: ["sword", "wand", "lollipop", "hammer", "bow", "shield", "mic", "carrot", "laser"],
+    clothes: ["overalls", "suit", "dress", "hoodie", "tuxedo", "raincoat", "armor", "jersey", "hanbok"],
+    shoes: ["boots", "sneakers", "slippers", "heels", "sandals", "skates", "flippers", "socks", "rocket"]
 };
 
 export const ITEM_NAMES: Record<string, string> = {
     cap: "야구 모자", crown: "황금 왕관", tophat: "마술사 모자", helmet: "안전모", beret: "베레모", partyhat: "파티 모자",
+    headphone: "헤드셋", flower: "꽃 핀", viking: "바이킹 투구",
     sword: "용사 칼", wand: "요정 지팡이", lollipop: "왕사탕", hammer: "뿅망치", bow: "장난감 활", shield: "나무 방패",
+    mic: "황금 마이크", carrot: "신선한 당근", laser: "광선검",
     overalls: "멜빵 바지", suit: "정장", dress: "드레스", hoodie: "후드티", tuxedo: "턱시도", raincoat: "우비",
-    boots: "장화", sneakers: "운동화", slippers: "슬리퍼", heels: "구두", sandals: "샌들", skates: "스케이트"
+    armor: "기사 갑옷", jersey: "축구 유니폼", hanbok: "색동 한복",
+    boots: "장화", sneakers: "운동화", slippers: "슬리퍼", heels: "구두", sandals: "샌들", skates: "스케이트",
+    flippers: "오리발", socks: "줄무늬 양말", rocket: "로켓 부츠"
 };
 
 export const BG_COLORS = [
@@ -59,7 +63,8 @@ export const INITIAL_PLAYER_STATE = {
         shoes: ""
     },
 
-    records: [], 
+    records: [],
+    logs: [], // Transaction History
     dailyPlayCount: 0, 
     dailyShopCount: 0, 
     lastGamingDate: ""

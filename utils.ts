@@ -278,6 +278,7 @@ export const savePlayerData = (state: PlayerState) => {
     inventory: state.inventory,
     equipped: state.equipped,
     records: state.records,
+    logs: state.logs, // Save logs
     dailyPlayCount: state.dailyPlayCount,
     dailyShopCount: state.dailyShopCount,
     lastGamingDate: state.lastGamingDate
@@ -370,6 +371,13 @@ export const drawCharacter = (
                 ctx.fillStyle = "#8d6e63"; ctx.fillRect(-4, 16, 8, 2); ctx.fillRect(-2, 10, 4, 6);
             } else if (equipped.shoes === 'skates') {
                 ctx.fillStyle = "white"; ctx.fillRect(-5, 10, 10, 8); ctx.fillStyle="gray"; ctx.fillRect(-5, 18, 10, 2);
+            } else if (equipped.shoes === 'flippers') {
+                ctx.fillStyle = "#43a047"; ctx.beginPath(); ctx.moveTo(-6, 12); ctx.lineTo(6, 12); ctx.lineTo(10, 22); ctx.lineTo(-10, 22); ctx.fill();
+            } else if (equipped.shoes === 'socks') {
+                ctx.fillStyle = "white"; ctx.fillRect(-4, 8, 8, 10); ctx.fillStyle="#ef5350"; ctx.fillRect(-4, 8, 8, 2);
+            } else if (equipped.shoes === 'rocket') {
+                ctx.fillStyle = "#9e9e9e"; ctx.fillRect(-5, 8, 10, 10); 
+                ctx.fillStyle = "orange"; ctx.beginPath(); ctx.moveTo(-3, 18); ctx.lineTo(0, 24); ctx.lineTo(3, 18); ctx.fill();
             }
         } else {
             ctx.strokeStyle = "white"; ctx.lineWidth = 2;
@@ -411,6 +419,13 @@ export const drawCharacter = (
             ctx.fillStyle = "black"; ctx.fillRect(-8, -15, 16, 30); ctx.fillStyle="white"; ctx.fillRect(-3, -15, 6, 20); ctx.fillStyle="black"; ctx.fillRect(-2, -12, 4, 2);
         } else if (equipped.clothes === 'raincoat') {
             ctx.fillStyle = "#ffeb3b"; ctx.beginPath(); ctx.moveTo(-8, -15); ctx.lineTo(8, -15); ctx.lineTo(10, 15); ctx.lineTo(-10, 15); ctx.fill();
+        } else if (equipped.clothes === 'armor') {
+            ctx.fillStyle = "#b0bec5"; ctx.fillRect(-9, -15, 18, 30); ctx.fillStyle="#78909c"; ctx.fillRect(-5, -5, 10, 10);
+        } else if (equipped.clothes === 'jersey') {
+            ctx.fillStyle = "#0d47a1"; ctx.fillRect(-8, -15, 16, 30); ctx.fillStyle="white"; ctx.font="8px Arial"; ctx.fillText("7", -2, -2);
+        } else if (equipped.clothes === 'hanbok') {
+            ctx.fillStyle = "#f48fb1"; ctx.beginPath(); ctx.moveTo(-8, -15); ctx.lineTo(8, -15); ctx.lineTo(12, 15); ctx.lineTo(-12, 15); ctx.fill();
+            ctx.fillStyle = "#ce93d8"; ctx.fillRect(-8, -15, 16, 12); ctx.fillStyle="white"; ctx.fillRect(-2, -15, 4, 12);
         }
     }
 
@@ -429,13 +444,6 @@ export const drawCharacter = (
         if (equipped.weapon) {
             ctx.save();
             ctx.translate(0, 15); // Move to hand
-            
-            // Fix: Rotate weapon again (user requested 90 degrees turn from previous -90)
-            // Setting to 0 aligns with arm (baton style). 
-            // Setting to Math.PI/2 would point backwards.
-            // Removing the rotation makes it parallel to arm which is often more natural for 'running' animations 
-            // unless it's a gun. Since it's sword/wand, holding it parallel (0 deg) or slightly up is standard.
-            // I will remove the previous rotation to make it align with the arm.
             
             if (equipped.weapon === 'sword') {
                  ctx.fillStyle = "#cfd8dc"; ctx.fillRect(0, -2, 35, 4); 
@@ -459,6 +467,15 @@ export const drawCharacter = (
                 ctx.rotate(Math.PI/2); 
                 ctx.fillStyle = "#8d6e63"; ctx.beginPath(); ctx.arc(0, 0, 14, 0, Math.PI*2); ctx.fill(); 
                 ctx.fillStyle = "silver"; ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI*2); ctx.fill();
+            } else if (equipped.weapon === 'mic') {
+                ctx.fillStyle = "black"; ctx.fillRect(0, -2, 15, 4);
+                ctx.fillStyle = "#bdbdbd"; ctx.beginPath(); ctx.arc(18, 0, 6, 0, Math.PI*2); ctx.fill();
+            } else if (equipped.weapon === 'carrot') {
+                ctx.fillStyle = "#ff9800"; ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(25, -5); ctx.lineTo(25, 5); ctx.fill();
+                ctx.fillStyle = "#4caf50"; ctx.fillRect(25, -2, 5, 4);
+            } else if (equipped.weapon === 'laser') {
+                ctx.fillStyle = "#bdbdbd"; ctx.fillRect(0, -2, 8, 4);
+                ctx.fillStyle = "#00e676"; ctx.shadowColor = "#00e676"; ctx.shadowBlur = 10; ctx.fillRect(8, -2, 30, 4); ctx.shadowBlur = 0;
             }
             ctx.restore();
         }
@@ -511,6 +528,16 @@ export const drawCharacter = (
              ctx.fillStyle = "#d32f2f"; ctx.beginPath(); ctx.ellipse(2, -35, 16, 10, 0.2, 0, Math.PI*2); ctx.fill(); ctx.fillRect(0,-45, 2, 6);
         } else if (equipped.hat === 'partyhat') {
              ctx.fillStyle = "#ab47bc"; ctx.beginPath(); ctx.moveTo(-8, -32); ctx.lineTo(12, -32); ctx.lineTo(2, -55); ctx.fill();
+        } else if (equipped.hat === 'headphone') {
+            ctx.strokeStyle = "#333"; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(2, -26, 16, Math.PI, 0); ctx.stroke();
+            ctx.fillStyle = "#ef5350"; ctx.fillRect(-14, -30, 6, 10); ctx.fillRect(12, -30, 6, 10);
+        } else if (equipped.hat === 'flower') {
+            ctx.fillStyle = "#ff4081"; ctx.beginPath(); ctx.arc(10, -35, 5, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = "white"; ctx.beginPath(); ctx.arc(10, -35, 2, 0, Math.PI*2); ctx.fill();
+        } else if (equipped.hat === 'viking') {
+            ctx.fillStyle = "#9e9e9e"; ctx.beginPath(); ctx.arc(2, -30, 14, Math.PI, 0); ctx.fill();
+            ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.moveTo(-12, -30); ctx.lineTo(-18, -45); ctx.lineTo(-8, -35); ctx.fill();
+            ctx.beginPath(); ctx.moveTo(16, -30); ctx.lineTo(22, -45); ctx.lineTo(12, -35); ctx.fill();
         }
     }
     ctx.restore();
