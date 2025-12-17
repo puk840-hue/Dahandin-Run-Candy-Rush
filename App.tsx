@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import GameCanvas from './components/GameCanvas';
-import { AppView, PlayerState, GameConfig, GameRecord, TransactionLog } from './types';
-import { INITIAL_PLAYER_STATE, INITIAL_CONFIG, GAME_ITEMS, ITEM_NAMES } from './constants';
+import { AppView, PlayerState, GameConfig, GameRecord, TransactionLog, PlayerStats } from './types';
+import { INITIAL_PLAYER_STATE, INITIAL_CONFIG, GAME_ITEMS, ITEM_NAMES, ACHIEVEMENTS } from './constants';
 import { loadPlayerData, savePlayerData, decryptConfig, encryptConfig, getGamingDate, drawCharacter, drawCandySimple, audioManager } from './utils';
 
 // Helper UI Component for panels
@@ -63,7 +63,7 @@ const CharacterPreview: React.FC<{ player: PlayerState, scale?: number }> = ({ p
 };
 
 const Button: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'secondary' | 'accent' | 'danger' }> = ({ children, variant = 'primary', className = "", onClick, ...props }) => {
-    const base = "w-full py-3 px-6 rounded-xl font-bold text-lg shadow-md transform transition active:scale-95 hover:-translate-y-0.5 flex items-center justify-center gap-2 mb-3";
+    const base = "w-full py-3 px-6 rounded-xl font-bold text-lg shadow-md transform transition active:scale-95 hover:-translate-y-0.5 flex items-center justify-center gap-2 mb-3 disabled:opacity-50 disabled:cursor-not-allowed";
     const variants = {
         primary: "bg-gradient-to-br from-amber-700 to-amber-900 text-white",
         secondary: "bg-gradient-to-br from-gray-400 to-gray-600 text-white",
@@ -73,6 +73,7 @@ const Button: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement> & { variant
     
     // Wrapper for click sound
     const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+        if (props.disabled) return;
         audioManager.playClickSfx();
         if (onClick) onClick(e);
     };
@@ -88,6 +89,9 @@ const App: React.FC = () => {
     
     // New state to track if entered via Magic Link
     const [isMagicLink, setIsMagicLink] = useState(false);
+    
+    // 1-second delay for Intro buttons to prevent magic link flickering misclicks
+    const [isIntroReady, setIsIntroReady] = useState(false);
 
     const [isHardMode, setIsHardMode] = useState(false);
     const [purchaseFeedback, setPurchaseFeedback] = useState<{ message: string, subMessage?: string, color?: string, icon?: string } | null>(null);
@@ -107,6 +111,7 @@ const App: React.FC = () => {
     const [exchangeAmount, setExchangeAmount] = useState(1);
     const [showShopInfo, setShowShopInfo] = useState(false);
     const [showGameModeSelect, setShowGameModeSelect] = useState(false);
+    const [showTitleSelect, setShowTitleSelect] = useState(false);
 
     // Initialization
     useEffect(() => {
@@ -124,6 +129,10 @@ const App: React.FC = () => {
                 window.location.search = "";
             }
         }
+        
+        // Enable buttons after 1 second
+        const timer = setTimeout(() => setIsIntroReady(true), 1000);
+        return () => clearTimeout(timer);
     }, []);
 
     // Shop Intro Modal Trigger
@@ -132,6 +141,42 @@ const App: React.FC = () => {
             setShowShopInfo(true);
         }
     }, [view]);
+
+    // Achievement Checker Logic
+    const checkAchievements = (currentPlayer: PlayerState) => {
+        const newUnlocked: string[] = [];
+        const invCount = currentPlayer.inventory.hats.length + currentPlayer.inventory.weapons.length + currentPlayer.inventory.clothes.length + currentPlayer.inventory.shoes.length;
+        
+        ACHIEVEMENTS.forEach(ach => {
+            if (!currentPlayer.unlockedTitles.includes(ach.id)) {
+                if (ach.condition(currentPlayer.stats, currentPlayer.level, currentPlayer.wallet, invCount)) {
+                    newUnlocked.push(ach.id);
+                }
+            }
+        });
+
+        if (newUnlocked.length > 0) {
+            const updatedUnlocked = [...currentPlayer.unlockedTitles, ...newUnlocked];
+            // Auto-equip if it's the first title
+            const activeTitle = currentPlayer.activeTitle ? currentPlayer.activeTitle : newUnlocked[0];
+            
+            const updatedPlayer = {
+                ...currentPlayer,
+                unlockedTitles: updatedUnlocked,
+                activeTitle: activeTitle
+            };
+            setPlayer(updatedPlayer);
+            savePlayerData(updatedPlayer);
+            
+            const earnedTitles = newUnlocked.map(id => ACHIEVEMENTS.find(a => a.id === id)?.name).join(', ');
+            setPurchaseFeedback({ 
+                message: "🎉 칭호 획득!", 
+                subMessage: `${earnedTitles} 칭호를 획득했습니다!`, 
+                icon: "fa-crown" 
+            });
+            audioManager.playUpgradeSfx();
+        }
+    };
 
     // --- Actions ---
 
@@ -224,29 +269,32 @@ const App: React.FC = () => {
                     dailyShop = 0; 
                 }
 
-                const currentCandySkin = (typeof loaded?.currentCandySkin === 'number') ? loaded.currentCandySkin : 0;
-                const inventory = loaded?.inventory || INITIAL_PLAYER_STATE.inventory;
-                const equipped = loaded?.equipped || INITIAL_PLAYER_STATE.equipped;
-                const totalCandies = loaded?.totalCandies || 0; 
-                const logs = loaded?.logs || [];
+                // Construct new player state
+                // Prioritize API wallet if available, otherwise use loaded or default
+                const initialWallet = config.api ? fetchedWallet : (loaded?.wallet ?? 100);
 
-                setPlayer({
+                const newPlayerState: PlayerState = {
                     ...INITIAL_PLAYER_STATE,
                     mode: 'student',
                     code: codeInput,
                     name: fetchedName,
-                    wallet: fetchedWallet, // Set wallet from API
-                    totalCandies,
-                    ...loaded,
-                    currentCandySkin,
-                    inventory,
-                    equipped,
-                    logs,
+                    ...loaded, // Load saved state (inventory, records, etc.)
+                    wallet: initialWallet, // Ensure API wallet takes precedence if applicable
+                    totalCandies: loaded?.totalCandies || 0,
                     dailyPlayCount: dailyPlay,
                     dailyShopCount: dailyShop,
                     lastGamingDate: today,
-                    lastGlobalReset: lastReset
-                });
+                    lastGlobalReset: lastReset,
+                    // Ensure stats structure exists if loading from old version
+                    stats: { ...INITIAL_PLAYER_STATE.stats, ...(loaded?.stats || {}) },
+                    unlockedTitles: loaded?.unlockedTitles || [],
+                    activeTitle: loaded?.activeTitle || null
+                };
+
+                setPlayer(newPlayerState);
+                
+                // CRITICAL: Save immediately to persist the "reset" state (date/counts)
+                savePlayerData(newPlayerState);
                 
                 // Instead of going directly to Lobby, show Tutorial
                 setShowTutorial(true);
@@ -265,6 +313,29 @@ const App: React.FC = () => {
         setShowTutorial(false);
         setView(AppView.LOBBY);
     }
+
+    const handleEnterShop = () => {
+        // Shop Limit Logic: Check counts on ENTRY
+        if (player.mode === 'student' && player.dailyShopCount >= config.shopLimit) {
+            return alert("오늘의 상점 이용 횟수를 모두 사용했어요!");
+        }
+        
+        // Increment count on ENTRY
+        const updatedStats = { 
+            ...player.stats, 
+            totalShopVisits: (player.stats.totalShopVisits || 0) + 1 
+        };
+        const updated = { 
+            ...player, 
+            dailyShopCount: player.mode === 'student' ? player.dailyShopCount + 1 : player.dailyShopCount,
+            stats: updatedStats
+        };
+        setPlayer(updated);
+        savePlayerData(updated);
+        checkAchievements(updated); // Check 'Shopper' achievement
+        
+        setView(AppView.SHOP);
+    };
 
     const openGameModeSelect = () => {
         setShowGameModeSelect(true);
@@ -287,10 +358,16 @@ const App: React.FC = () => {
         if (player.totalCandies < config.hardModeEntryCost) {
             return alert(`캔디가 부족해요! (입장료: ${config.hardModeEntryCost}개)`);
         }
-        // Deduct Candies
-        const updated = { ...player, totalCandies: player.totalCandies - config.hardModeEntryCost };
+        // Deduct Candies & track hard mode count
+        const updatedStats = { ...player.stats, totalHardModeCount: (player.stats.totalHardModeCount || 0) + 1 };
+        const updated = { 
+            ...player, 
+            totalCandies: player.totalCandies - config.hardModeEntryCost,
+            stats: updatedStats
+        };
         setPlayer(updated);
         savePlayerData(updated);
+        checkAchievements(updated); // Check 'Moth' achievement
         
         setIsHardMode(true);
         launchGame();
@@ -313,20 +390,50 @@ const App: React.FC = () => {
             timeStr: `${Math.floor(timeSec/60).toString().padStart(2,'0')}:${(timeSec%60).toString().padStart(2,'0')}`,
             difficulty: isHardMode ? 'hard' : 'normal'
         };
+        
+        // Update Cumulative Stats
+        const newStats: PlayerStats = {
+            ...player.stats,
+            totalPlayCount: player.stats.totalPlayCount + 1,
+            totalPlayTimeSec: player.stats.totalPlayTimeSec + timeSec,
+            totalFalls: player.stats.totalFalls + (fell ? 1 : 0),
+            maxTimeSec: Math.max(player.stats.maxTimeSec, timeSec)
+        };
+
         const updatedRecords = [newRecord, ...player.records];
-        const updatedPlayer = { ...player, records: updatedRecords };
+        const updatedPlayer = { 
+            ...player, 
+            records: updatedRecords,
+            stats: newStats
+        };
         setPlayer(updatedPlayer);
         savePlayerData(updatedPlayer);
+        
+        checkAchievements(updatedPlayer); // Check All Stats-based Achievements
+
         setGameOverModalOpen(true);
     };
 
     const handleAddScore = (amount: number) => {
         setPlayer(prev => {
+            const newStats = { 
+                ...prev.stats, 
+                totalCandiesCollected: prev.stats.totalCandiesCollected + amount 
+            };
             const next = { 
                 ...prev, 
-                totalCandies: prev.totalCandies + amount
+                totalCandies: prev.totalCandies + amount,
+                stats: newStats
             };
-            savePlayerData(next);
+            // Optimization: Don't save on every candy pickup to reduce I/O, rely on game over save or periodic
+            // But we must save for achievements check if we want instant feedback? 
+            // For performance, let's just update state and save on Game Over.
+            // *Correction*: We DO need to update `totalCandies` persisted in case of crash.
+            savePlayerData(next); 
+            
+            // Check achievement on threshold (optional, but good for feedback)
+            if (newStats.totalCandiesCollected === 300) checkAchievements(next);
+            
             return next;
         });
     };
@@ -350,6 +457,7 @@ const App: React.FC = () => {
             setPlayer(updated);
             savePlayerData(updated);
             audioManager.playClickSfx();
+            checkAchievements(updated); // Check 'Rich' achievement
             alert("환전이 완료되었습니다!");
             setShowExchange(false);
             setExchangeAmount(1);
@@ -359,10 +467,7 @@ const App: React.FC = () => {
     };
 
     const buyUpgrade = () => {
-        // Check shop limit
-        if (player.mode === 'student' && player.dailyShopCount >= config.shopLimit) {
-            return alert("오늘의 상점 이용 횟수를 모두 사용했어요!");
-        }
+        // Removed Daily Shop Count Check (Now checked on Entry)
 
         const cost = player.level * config.priceUpgrade;
         if (player.wallet >= cost && player.level < 20) {
@@ -378,22 +483,19 @@ const App: React.FC = () => {
                 ...player, 
                 wallet: player.wallet - cost, 
                 level: player.level + 1,
-                logs: [newLog, ...(player.logs || [])],
-                dailyShopCount: player.mode === 'student' ? player.dailyShopCount + 1 : player.dailyShopCount
+                logs: [newLog, ...(player.logs || [])]
             };
             setPlayer(updated);
             savePlayerData(updated);
             // SFX
             audioManager.playUpgradeSfx();
+            checkAchievements(updated); // Check 'Expert'
             setPurchaseFeedback({ message: "레벨업 성공!", subMessage: `점수 획득량이 Lv.${updated.level}로 증가했어요!`, icon: "fa-arrow-up" });
         } else if (player.wallet < cost) { alert("쿠키가 부족해요!"); }
     };
 
     const buyGacha = () => {
-        // Check shop limit
-        if (player.mode === 'student' && player.dailyShopCount >= config.shopLimit) {
-            return alert("오늘의 상점 이용 횟수를 모두 사용했어요!");
-        }
+        // Removed Daily Shop Count Check (Now checked on Entry)
 
         if (player.wallet >= config.priceGacha) {
             const missing: {cat: string, item: string}[] = [];
@@ -420,13 +522,13 @@ const App: React.FC = () => {
                 ...player, 
                 wallet: player.wallet - config.priceGacha, 
                 inventory: updatedInventory,
-                logs: [newLog, ...(player.logs || [])],
-                dailyShopCount: player.mode === 'student' ? player.dailyShopCount + 1 : player.dailyShopCount
+                logs: [newLog, ...(player.logs || [])]
             };
             setPlayer(updated);
             savePlayerData(updated);
             // SFX
             audioManager.playGachaSfx();
+            checkAchievements(updated); // Check 'Fashionista'
             setPurchaseFeedback({ message: "아이템 획득!", subMessage: ITEM_NAMES[picked.item], icon: "fa-gift" });
         } else { alert("쿠키가 부족해요!"); }
     };
@@ -456,6 +558,12 @@ const App: React.FC = () => {
         } else {
             startNormalGame();
         }
+    };
+
+    const getActiveTitleName = () => {
+        if (!player.activeTitle) return "";
+        const t = ACHIEVEMENTS.find(a => a.id === player.activeTitle);
+        return t ? `[${t.name}] ` : "";
     };
 
     return (
@@ -512,8 +620,8 @@ const App: React.FC = () => {
                         </div>
 
                         {/* Action Buttons */}
-                        <div className="flex flex-col gap-4 w-full max-w-xs">
-                             <button onClick={handleStudentStart} className="group relative w-full py-5 rounded-2xl bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-bold text-xl shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all overflow-hidden">
+                        <div className={`flex flex-col gap-4 w-full max-w-xs transition-opacity duration-500 ${isIntroReady ? 'opacity-100' : 'opacity-50'}`}>
+                             <button disabled={!isIntroReady} onClick={handleStudentStart} className="group relative w-full py-5 rounded-2xl bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-bold text-xl shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all overflow-hidden disabled:cursor-not-allowed">
                                 <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
                                 <div className="relative flex items-center justify-center gap-3">
                                     <span className="bg-white/20 p-2 rounded-lg"><i className="fa-solid fa-user-graduate"></i></span>
@@ -523,14 +631,14 @@ const App: React.FC = () => {
                             
                             {!isMagicLink && (
                                 <>
-                                    <button onClick={handleTeacherLogin} className="group relative w-full py-4 rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white font-bold text-lg hover:shadow-xl hover:-translate-y-0.5 transition-all border border-white/10">
+                                    <button disabled={!isIntroReady} onClick={handleTeacherLogin} className="group relative w-full py-4 rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white font-bold text-lg hover:shadow-xl hover:-translate-y-0.5 transition-all border border-white/10 disabled:cursor-not-allowed">
                                         <div className="relative flex items-center justify-center gap-2">
                                             <i className="fa-solid fa-chalkboard-user"></i>
                                             <span>선생님 시작하기</span>
                                         </div>
                                     </button>
                                     
-                                    <button onClick={handleTestMode} className="w-full py-4 rounded-2xl bg-white/5 border-2 border-white/10 text-gray-400 font-bold text-lg hover:bg-white/10 hover:text-white hover:border-white/30 transition-all flex items-center justify-center gap-2">
+                                    <button disabled={!isIntroReady} onClick={handleTestMode} className="w-full py-4 rounded-2xl bg-white/5 border-2 border-white/10 text-gray-400 font-bold text-lg hover:bg-white/10 hover:text-white hover:border-white/30 transition-all flex items-center justify-center gap-2 disabled:cursor-not-allowed">
                                         <i className="fa-solid fa-gamepad"></i> 테스트 모드로 체험하기
                                     </button>
                                 </>
@@ -671,7 +779,57 @@ const App: React.FC = () => {
                         </div>
                     )}
 
-                    <h2 className="text-3xl font-bold text-gray-800 mb-6">안녕, {player.name}!</h2>
+                    {showTitleSelect && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowTitleSelect(false)}>
+                            <div className="bg-white p-6 rounded-3xl w-[90%] max-w-2xl shadow-2xl relative max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                                <div className="flex justify-between items-center mb-6">
+                                    <h3 className="text-2xl font-black text-gray-800"><i className="fa-solid fa-crown text-yellow-500 mr-2"></i>칭호 설정</h3>
+                                    <button onClick={() => setShowTitleSelect(false)} className="text-gray-400 hover:text-gray-600"><i className="fa-solid fa-xmark text-2xl"></i></button>
+                                </div>
+                                <div className="overflow-y-auto flex-1 no-scrollbar grid grid-cols-1 md:grid-cols-2 gap-3 pr-2">
+                                    <div onClick={() => { setPlayer({...player, activeTitle: null}); savePlayerData({...player, activeTitle: null}); }} 
+                                         className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex items-center gap-3 ${player.activeTitle === null ? 'border-amber-500 bg-amber-50 shadow-md' : 'border-gray-200 hover:bg-gray-50'}`}>
+                                        <div className="text-2xl">😶</div>
+                                        <div>
+                                            <div className="font-bold text-gray-800">칭호 없음</div>
+                                            <div className="text-xs text-gray-500">칭호를 사용하지 않습니다.</div>
+                                        </div>
+                                    </div>
+                                    {ACHIEVEMENTS.map(ach => {
+                                        const isUnlocked = player.unlockedTitles.includes(ach.id);
+                                        return (
+                                            <div key={ach.id} 
+                                                 onClick={() => { if(isUnlocked) { setPlayer({...player, activeTitle: ach.id}); savePlayerData({...player, activeTitle: ach.id}); } }} 
+                                                 className={`p-4 rounded-xl border-2 transition-all flex items-center gap-3 relative overflow-hidden ${player.activeTitle === ach.id ? 'border-amber-500 bg-amber-50 shadow-md' : (isUnlocked ? 'border-gray-200 cursor-pointer hover:bg-gray-50' : 'border-gray-100 bg-gray-100 opacity-70 cursor-not-allowed')}`}>
+                                                <div className={`text-2xl ${!isUnlocked ? 'grayscale' : ''}`}>{ach.icon}</div>
+                                                <div>
+                                                    <div className={`font-bold ${isUnlocked ? 'text-gray-800' : 'text-gray-400'}`}>{ach.name}</div>
+                                                    <div className="text-xs text-gray-500">{ach.desc}</div>
+                                                </div>
+                                                {!isUnlocked && <div className="absolute inset-0 bg-gray-200/50 flex items-center justify-center"><i className="fa-solid fa-lock text-gray-400"></i></div>}
+                                            </div>
+                                        )
+                                    })}
+                                </div>
+                                <div className="mt-4 text-center">
+                                    <p className="text-sm text-gray-500 font-bold">
+                                        현재 이름: <span className="text-amber-600 text-lg">{getActiveTitleName()}{player.name}</span>
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    <h2 className="text-3xl font-bold text-gray-800 mb-6 flex items-center justify-center gap-2">
+                        {player.activeTitle && (
+                            <span className="bg-amber-100 text-amber-700 px-3 py-1 rounded-lg text-lg border border-amber-200">
+                                {ACHIEVEMENTS.find(a => a.id === player.activeTitle)?.icon} {ACHIEVEMENTS.find(a => a.id === player.activeTitle)?.name}
+                            </span>
+                        )}
+                        <span>{player.name}</span>
+                        <button onClick={() => setShowTitleSelect(true)} className="w-8 h-8 rounded-full bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-600 text-sm ml-2"><i className="fa-solid fa-pen"></i></button>
+                    </h2>
+                    
                     <div className="flex gap-4 mb-6">
                         <div className="flex-1 bg-orange-100 p-6 rounded-3xl shadow-inner cursor-pointer hover:bg-orange-200 transition-colors relative group" onClick={() => setShowWalletLog(true)}>
                             <div className="text-orange-800 font-bold flex items-center justify-center gap-3 text-xl mb-2"><i className="fa-solid fa-wallet"></i> 내 지갑</div>
@@ -691,7 +849,7 @@ const App: React.FC = () => {
                              <div className="text-3xl font-black text-blue-600">{Math.max(0, config.dailyLimit - player.dailyPlayCount)} <span className="text-base text-blue-400">/ {config.dailyLimit}</span></div>
                         </div>
                         <div className="flex-1 bg-pink-100 p-4 rounded-3xl shadow-inner text-center">
-                            <div className="text-pink-800 font-bold text-lg mb-1"><i className="fa-solid fa-cart-shopping mr-2"></i>상점 이용</div>
+                            <div className="text-pink-800 font-bold text-lg mb-1"><i className="fa-solid fa-cart-shopping mr-2"></i>상점 입장</div>
                              <div className="text-3xl font-black text-pink-600">{Math.max(0, config.shopLimit - player.dailyShopCount)} <span className="text-base text-pink-400">/ {config.shopLimit}</span></div>
                         </div>
                     </div>
@@ -753,7 +911,7 @@ const App: React.FC = () => {
 
                     <Button onClick={openGameModeSelect} variant="accent" className="py-8 text-3xl mb-6">▶ 게임 시작</Button>
                     <div className="grid grid-cols-2 gap-4">
-                        <Button onClick={() => setView(AppView.SHOP)} variant="secondary" className="text-xl"><i className="fa-solid fa-shop"></i> 상점</Button>
+                        <Button onClick={handleEnterShop} variant="secondary" className="text-xl"><i className="fa-solid fa-shop"></i> 상점</Button>
                         <Button onClick={() => setView(AppView.WARDROBE)} variant="secondary" className="text-xl bg-purple-500 text-white"><i className="fa-solid fa-shirt"></i> 옷장</Button>
                     </div>
                     <Button onClick={() => setView(AppView.RECORDS)} variant="secondary" className="mt-4 text-xl"><i className="fa-solid fa-trophy"></i> 명예의 전당</Button>
@@ -795,7 +953,7 @@ const App: React.FC = () => {
                     )}
 
                     <div className="text-gray-500 font-bold mb-4 text-center bg-gray-100 py-2 rounded-xl">
-                        오늘 상점 이용 가능 횟수: <span className="text-pink-600">{Math.max(0, config.shopLimit - player.dailyShopCount)}</span> / {config.shopLimit}
+                        오늘 상점 이용 횟수: <span className="text-pink-600">{player.dailyShopCount}</span> / {config.shopLimit} (입장 시 차감)
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
                         <div className="bg-white p-6 rounded-3xl shadow-lg border-2 border-gray-100 flex flex-col items-center hover:-translate-y-1 transition-transform">

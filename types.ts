@@ -41,6 +41,24 @@ export interface PlayerEquipped {
   shoes: string;
 }
 
+export interface PlayerStats {
+    totalPlayCount: number;
+    totalHardModeCount: number;
+    totalCandiesCollected: number;
+    totalFalls: number;
+    totalShopVisits: number;
+    totalPlayTimeSec: number;
+    maxTimeSec: number;
+}
+
+export interface Achievement {
+    id: string;
+    name: string;
+    icon: string;
+    desc: string;
+    condition: (stats: PlayerStats, level: number, wallet: number, inventoryCount: number) => boolean;
+}
+
 export interface PlayerState {
   mode: 'student' | 'test' | 'guest';
   name: string;
@@ -55,6 +73,11 @@ export interface PlayerState {
   
   inventory: PlayerInventory;
   equipped: PlayerEquipped;
+
+  // Title System
+  activeTitle: string | null;
+  unlockedTitles: string[];
+  stats: PlayerStats; // Cumulative stats for achievements
 
   records: GameRecord[];
   logs: TransactionLog[]; // New: Transaction History

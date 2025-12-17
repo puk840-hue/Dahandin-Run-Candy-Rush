@@ -1,4 +1,5 @@
 
+import { Achievement, PlayerState } from './types';
 
 export const SECRET_PASSPHRASE = "DAHANDIN_SECRET_2024"; 
 export const STORAGE_KEY = "dahandin_run_save_v4_react";
@@ -39,7 +40,7 @@ export const BG_COLORS = [
     "linear-gradient(to bottom, #CE93D8 0%, #BA68C8 100%)" 
 ];
 
-export const INITIAL_PLAYER_STATE = {
+export const INITIAL_PLAYER_STATE: PlayerState = {
     mode: "guest" as const, 
     name: "게스트", 
     code: "", 
@@ -63,6 +64,19 @@ export const INITIAL_PLAYER_STATE = {
         shoes: ""
     },
 
+    // Title System
+    activeTitle: null,
+    unlockedTitles: [],
+    stats: {
+        totalPlayCount: 0,
+        totalHardModeCount: 0,
+        totalCandiesCollected: 0,
+        totalFalls: 0,
+        totalShopVisits: 0,
+        totalPlayTimeSec: 0,
+        maxTimeSec: 0
+    },
+
     records: [],
     logs: [], // Transaction History
     dailyPlayCount: 0, 
@@ -83,3 +97,46 @@ export const INITIAL_CONFIG = {
     exchangeRate: 10,   // 10 Candies = 1 Cookie
     globalResetTimestamp: 0
 };
+
+export const ACHIEVEMENTS: Achievement[] = [
+    {
+        id: 'newbie', name: '걸음마 단계', icon: '👶', desc: '게임을 1번이라도 플레이하세요.',
+        condition: (s) => s.totalPlayCount >= 1
+    },
+    {
+        id: 'gravity_tester', name: '중력 실험가', icon: '🤕', desc: '구멍에 총 10번 빠지세요.',
+        condition: (s) => s.totalFalls >= 10
+    },
+    {
+        id: 'candy_lover', name: '캔디 중독자', icon: '🍬', desc: '누적 캔디 300개를 모으세요.',
+        condition: (s) => s.totalCandiesCollected >= 300
+    },
+    {
+        id: 'survivor', name: '생존 전문가', icon: '⏱️', desc: '한 게임에서 60초 이상 버티세요.',
+        condition: (s) => s.maxTimeSec >= 60
+    },
+    {
+        id: 'rich', name: '부자', icon: '💎', desc: '지갑에 쿠키를 100개 이상 보유하세요.',
+        condition: (_, __, wallet) => wallet >= 100
+    },
+    {
+        id: 'fashionista', name: '패션 피플', icon: '🕶️', desc: '아이템을 총 5개 이상 수집하세요.',
+        condition: (_, __, ___, invCount) => invCount >= 5
+    },
+    {
+        id: 'moth', name: '불나방', icon: '🔥', desc: '하드모드를 1회 플레이하세요.',
+        condition: (s) => s.totalHardModeCount >= 1
+    },
+    {
+        id: 'shopper', name: '단골 손님', icon: '🛍️', desc: '상점을 누적 10회 방문하세요.',
+        condition: (s) => s.totalShopVisits >= 10
+    },
+    {
+        id: 'expert', name: '고인물', icon: '🎓', desc: '레벨 10을 달성하세요.',
+        condition: (_, level) => level >= 10
+    },
+    {
+        id: 'marathon', name: '마라토너', icon: '🏃', desc: '총 달린 시간이 10분(600초)을 넘기세요.',
+        condition: (s) => s.totalPlayTimeSec >= 600
+    }
+];

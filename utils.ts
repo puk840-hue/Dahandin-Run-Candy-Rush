@@ -299,7 +299,11 @@ export const getGamingDate = (): string => {
   if (now.getHours() < 8) {
       now.setDate(now.getDate() - 1);
   }
-  return now.toLocaleDateString();
+  // Use manual YYYY-MM-DD formatting to prevent locale issues across devices
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 };
 
 export const getRandomColor = () => {

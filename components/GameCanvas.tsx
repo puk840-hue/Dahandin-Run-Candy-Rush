@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { PlayerState, GameConfig, GameObject, Particle, Cloud } from '../types';
-import { BG_COLORS } from '../constants';
+import { BG_COLORS, ACHIEVEMENTS } from '../constants';
 import { drawCharacter, drawCandySimple, audioManager } from '../utils';
 
 interface GameCanvasProps {
@@ -490,6 +490,12 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ playerState, config, onGameOver
     };
   }, []); // Dependencies empty to prevent canvas reset on re-renders
 
+  const getActiveTitleName = () => {
+      if (!playerState.activeTitle) return "";
+      const t = ACHIEVEMENTS.find(a => a.id === playerState.activeTitle);
+      return t ? `[${t.name}] ` : "";
+  };
+
   return (
     <div ref={containerRef} className="relative w-full h-full">
         <canvas ref={canvasRef} className="block w-full h-full" />
@@ -497,7 +503,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ playerState, config, onGameOver
         <div className="absolute top-0 left-0 w-full p-4 flex flex-row justify-between items-center pointer-events-none z-10 gap-2">
             <div className="flex flex-row gap-2 items-center overflow-x-auto no-scrollbar">
                 <div className="bg-black/40 backdrop-blur-md px-4 py-2 rounded-2xl flex items-center gap-3 border-2 border-white/20 text-white font-bold text-lg shadow-lg shrink-0">
-                    <i className="fa-solid fa-user text-yellow-300"></i> <span className="max-w-[100px] truncate">{playerState.name}</span>
+                    <i className="fa-solid fa-user text-yellow-300"></i> 
+                    <span className="max-w-[150px] truncate">{getActiveTitleName()}{playerState.name}</span>
                 </div>
                 <div className="bg-black/40 backdrop-blur-md px-3 py-2 rounded-2xl flex items-center justify-center gap-2 border-2 border-white/20 text-white font-bold text-lg shadow-lg shrink-0">
                     <i className="fa-solid fa-cookie text-amber-500 text-xl"></i> <span>{playerState.wallet}</span>
