@@ -61,6 +61,7 @@ export interface PlayerState {
   dailyPlayCount: number;
   dailyShopCount: number;
   lastGamingDate: string;
+  lastGlobalReset?: number; // New: For teacher forced reset
 }
 
 export interface GameConfig {
@@ -71,8 +72,9 @@ export interface GameConfig {
   priceGacha: number;
   dailyLimit: number;
   shopLimit: number;
-  hardModeCost: number; // New: threshold to unlock hard mode
+  hardModeEntryCost: number; // New: Cost per play for Hard Mode
   exchangeRate: number; // New: Candies needed for 1 Cookie
+  globalResetTimestamp: number; // New: Timestamp to force reset student counts
 }
 
 export interface GameObject {

@@ -106,6 +106,7 @@ const App: React.FC = () => {
     const [showExchange, setShowExchange] = useState(false);
     const [exchangeAmount, setExchangeAmount] = useState(1);
     const [showShopInfo, setShowShopInfo] = useState(false);
+    const [showGameModeSelect, setShowGameModeSelect] = useState(false);
 
     // Initialization
     useEffect(() => {
@@ -159,6 +160,14 @@ const App: React.FC = () => {
         navigator.clipboard.writeText(link).then(() => alert("✨ 학생용 매직 링크가 복사되었습니다!"));
     };
 
+    const handleResetAllCounts = () => {
+        if (window.confirm("정말 모든 학생의 도전 횟수와 상점 이용 횟수를 초기화하시겠습니까?\n(매직 링크로 접속한 학생들에게 적용됩니다)")) {
+            const newConfig = { ...config, globalResetTimestamp: Date.now() };
+            setConfig(newConfig);
+            alert("초기화 설정이 적용되었습니다. '설정 저장 및 매직 링크 복사'를 눌러 학생들에게 공유해주세요.");
+        }
+    }
+
     const handleStudentLogin = async () => {
         const codeInput = (document.getElementById('studentCode') as HTMLInputElement).value;
         if (!codeInput) return alert("학생 코드를 입력해주세요.");
@@ -199,7 +208,16 @@ const App: React.FC = () => {
                 const today = getGamingDate();
                 let dailyPlay = loaded?.dailyPlayCount || 0;
                 let dailyShop = loaded?.dailyShopCount || 0;
+                let lastReset = loaded?.lastGlobalReset || 0;
                 
+                // Teacher forced reset logic
+                if (config.globalResetTimestamp > lastReset) {
+                    dailyPlay = 0;
+                    dailyShop = 0;
+                    lastReset = config.globalResetTimestamp;
+                    alert("선생님이 오늘의 횟수를 초기화해주셨어요! 🎉");
+                }
+
                 // Reset daily counts if date changed (8AM check in getGamingDate)
                 if (loaded?.lastGamingDate !== today) { 
                     dailyPlay = 0; 
@@ -226,7 +244,8 @@ const App: React.FC = () => {
                     logs,
                     dailyPlayCount: dailyPlay,
                     dailyShopCount: dailyShop,
-                    lastGamingDate: today
+                    lastGamingDate: today,
+                    lastGlobalReset: lastReset
                 });
                 
                 // Instead of going directly to Lobby, show Tutorial
@@ -247,7 +266,11 @@ const App: React.FC = () => {
         setView(AppView.LOBBY);
     }
 
-    const startGame = () => {
+    const openGameModeSelect = () => {
+        setShowGameModeSelect(true);
+    };
+
+    const startNormalGame = () => {
         if (player.mode === 'student') {
             if (player.dailyPlayCount >= config.dailyLimit) {
                 return alert("오늘의 게임 횟수를 모두 사용했어요! 내일 다시 만나요.");
@@ -256,8 +279,27 @@ const App: React.FC = () => {
             setPlayer(updated);
             savePlayerData(updated);
         }
+        setIsHardMode(false);
+        launchGame();
+    };
+
+    const startHardGame = () => {
+        if (player.totalCandies < config.hardModeEntryCost) {
+            return alert(`캔디가 부족해요! (입장료: ${config.hardModeEntryCost}개)`);
+        }
+        // Deduct Candies
+        const updated = { ...player, totalCandies: player.totalCandies - config.hardModeEntryCost };
+        setPlayer(updated);
+        savePlayerData(updated);
+        
+        setIsHardMode(true);
+        launchGame();
+    };
+
+    const launchGame = () => {
         setGameOverModalOpen(false);
         setRestartConfirmOpen(false);
+        setShowGameModeSelect(false);
         setGameId(prev => prev + 1); 
         setView(AppView.GAME);
     };
@@ -398,9 +440,6 @@ const App: React.FC = () => {
         savePlayerData(updated);
     };
 
-    // Use config.hardModeCost to determine if hard mode is unlocked
-    const hardModeUnlocked = player.totalCandies >= config.hardModeCost || player.mode === 'test';
-
     const handleExitGame = () => {
         setGameOverModalOpen(false);
         setRestartConfirmOpen(false);
@@ -409,6 +448,14 @@ const App: React.FC = () => {
 
     const requestRestart = () => {
         setRestartConfirmOpen(true);
+    };
+
+    const startGame = () => {
+        if (isHardMode) {
+            startHardGame();
+        } else {
+            startNormalGame();
+        }
     };
 
     return (
@@ -576,10 +623,11 @@ const App: React.FC = () => {
                             <div><label className="block text-xl font-bold text-white mb-3"><i className="fa-solid fa-cart-shopping mr-2 text-pink-500"></i>일일 상점 이용</label><input type="number" className="w-full h-14 px-4 text-xl border-2 border-slate-600 bg-slate-800 text-white rounded-2xl" value={config.shopLimit} onChange={(e) => setConfig({...config, shopLimit: parseInt(e.target.value)})} /></div>
                             <div><label className="block text-xl font-bold text-white mb-3"><i className="fa-solid fa-arrow-up-right-dots mr-2 text-green-500"></i>업그레이드 비용</label><input type="number" className="w-full h-14 px-4 text-xl border-2 border-slate-600 bg-slate-800 text-white rounded-2xl" value={config.priceUpgrade} onChange={(e) => setConfig({...config, priceUpgrade: parseInt(e.target.value)})} /></div>
                             <div><label className="block text-xl font-bold text-white mb-3"><i className="fa-solid fa-dice mr-2 text-purple-500"></i>뽑기 비용</label><input type="number" className="w-full h-14 px-4 text-xl border-2 border-slate-600 bg-slate-800 text-white rounded-2xl" value={config.priceGacha} onChange={(e) => setConfig({...config, priceGacha: parseInt(e.target.value)})} /></div>
-                            <div><label className="block text-xl font-bold text-white mb-3"><i className="fa-solid fa-lock-open mr-2 text-red-500"></i>하드모드 해금 비용</label><input type="number" className="w-full h-14 px-4 text-xl border-2 border-slate-600 bg-slate-800 text-white rounded-2xl" value={config.hardModeCost} onChange={(e) => setConfig({...config, hardModeCost: parseInt(e.target.value)})} /></div>
+                            <div><label className="block text-xl font-bold text-white mb-3"><i className="fa-solid fa-fire mr-2 text-red-500"></i>하드모드 입장료 (캔디)</label><input type="number" className="w-full h-14 px-4 text-xl border-2 border-slate-600 bg-slate-800 text-white rounded-2xl" value={config.hardModeEntryCost} onChange={(e) => setConfig({...config, hardModeEntryCost: parseInt(e.target.value)})} /></div>
                             <div><label className="block text-xl font-bold text-white mb-3"><i className="fa-solid fa-right-left mr-2 text-yellow-500"></i>캔디 환율 (캔디 N개 = 쿠키 1개)</label><input type="number" className="w-full h-14 px-4 text-xl border-2 border-slate-600 bg-slate-800 text-white rounded-2xl" value={config.exchangeRate} onChange={(e) => setConfig({...config, exchangeRate: parseInt(e.target.value)})} /></div>
                         </div>
                         <div className="pt-6 border-t border-slate-700 flex flex-col gap-3">
+                            <Button onClick={handleResetAllCounts} variant="danger" className="text-xl py-4 !bg-red-900/50 hover:!bg-red-800 border border-red-500/50 text-red-100">🔥 모든 학생 횟수 초기화</Button>
                             <Button onClick={handleGenerateLink} variant="accent" className="text-xl py-4">✨ 설정 저장 및 매직 링크 복사</Button>
                             <Button onClick={() => setView(AppView.INTRO)} variant="secondary" className="text-xl py-4 !bg-slate-700 !text-gray-300 hover:!bg-slate-600">뒤로가기</Button>
                         </div>
@@ -598,8 +646,33 @@ const App: React.FC = () => {
 
             {view === AppView.LOBBY && (
                 <Panel>
+                    {showGameModeSelect && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowGameModeSelect(false)}>
+                            <div className="bg-white p-8 rounded-3xl w-[90%] max-w-2xl shadow-2xl relative" onClick={e => e.stopPropagation()}>
+                                <h3 className="text-3xl font-black text-gray-800 mb-8">모드를 선택하세요!</h3>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div onClick={startNormalGame} className="cursor-pointer bg-blue-50 border-4 border-blue-200 hover:border-blue-400 p-6 rounded-3xl transition-all hover:-translate-y-1 relative overflow-hidden group">
+                                        <div className="absolute top-0 right-0 bg-blue-500 text-white text-xs font-bold px-3 py-1 rounded-bl-xl">일반 모드</div>
+                                        <div className="text-6xl mb-4 group-hover:scale-110 transition-transform">🏃</div>
+                                        <h4 className="text-2xl font-bold text-blue-800 mb-2">기본 달리기</h4>
+                                        <p className="text-gray-500 text-sm font-bold">오늘의 도전 횟수 차감</p>
+                                        <p className="text-blue-600 font-bold mt-2">남은 횟수: {Math.max(0, config.dailyLimit - player.dailyPlayCount)}회</p>
+                                    </div>
+                                    <div onClick={startHardGame} className="cursor-pointer bg-red-50 border-4 border-red-200 hover:border-red-400 p-6 rounded-3xl transition-all hover:-translate-y-1 relative overflow-hidden group">
+                                         <div className="absolute top-0 right-0 bg-red-500 text-white text-xs font-bold px-3 py-1 rounded-bl-xl">하드 모드</div>
+                                        <div className="text-6xl mb-4 group-hover:scale-110 transition-transform">🔥</div>
+                                        <h4 className="text-2xl font-bold text-red-800 mb-2">무한 챌린지</h4>
+                                        <p className="text-gray-500 text-sm font-bold">도전 횟수 차감 없음</p>
+                                        <p className="text-red-600 font-bold mt-2">입장료: 캔디 {config.hardModeEntryCost}개</p>
+                                    </div>
+                                </div>
+                                <button onClick={() => setShowGameModeSelect(false)} className="mt-8 text-gray-400 hover:text-gray-600 font-bold border-b border-gray-300 pb-1">취소</button>
+                            </div>
+                        </div>
+                    )}
+
                     <h2 className="text-3xl font-bold text-gray-800 mb-6">안녕, {player.name}!</h2>
-                    <div className="flex gap-4 mb-8">
+                    <div className="flex gap-4 mb-6">
                         <div className="flex-1 bg-orange-100 p-6 rounded-3xl shadow-inner cursor-pointer hover:bg-orange-200 transition-colors relative group" onClick={() => setShowWalletLog(true)}>
                             <div className="text-orange-800 font-bold flex items-center justify-center gap-3 text-xl mb-2"><i className="fa-solid fa-wallet"></i> 내 지갑</div>
                             <div className="text-4xl font-black text-orange-600">{player.wallet} <span className="text-lg">쿠키</span></div>
@@ -609,6 +682,17 @@ const App: React.FC = () => {
                              <div className="text-purple-800 font-bold flex items-center justify-center gap-3 text-xl mb-2"><i className="fa-solid fa-candy-cane"></i> 보유 캔디</div>
                             <div className="text-4xl font-black text-purple-600">{player.totalCandies} <span className="text-lg">개</span></div>
                             <div className="absolute top-2 right-2 text-purple-400 opacity-50 group-hover:opacity-100"><i className="fa-solid fa-right-left"></i></div>
+                        </div>
+                    </div>
+                    
+                    <div className="flex gap-4 mb-8">
+                         <div className="flex-1 bg-blue-100 p-4 rounded-3xl shadow-inner text-center">
+                            <div className="text-blue-800 font-bold text-lg mb-1"><i className="fa-solid fa-gamepad mr-2"></i>오늘의 도전</div>
+                             <div className="text-3xl font-black text-blue-600">{Math.max(0, config.dailyLimit - player.dailyPlayCount)} <span className="text-base text-blue-400">/ {config.dailyLimit}</span></div>
+                        </div>
+                        <div className="flex-1 bg-pink-100 p-4 rounded-3xl shadow-inner text-center">
+                            <div className="text-pink-800 font-bold text-lg mb-1"><i className="fa-solid fa-cart-shopping mr-2"></i>상점 이용</div>
+                             <div className="text-3xl font-black text-pink-600">{Math.max(0, config.shopLimit - player.dailyShopCount)} <span className="text-base text-pink-400">/ {config.shopLimit}</span></div>
                         </div>
                     </div>
                     
@@ -667,18 +751,7 @@ const App: React.FC = () => {
                         </div>
                     )}
 
-                    <div className="bg-blue-50 p-4 rounded-2xl mb-6 text-blue-800 text-lg">
-                        오늘의 도전: <strong>{Math.max(0, config.dailyLimit - player.dailyPlayCount)}</strong> / {config.dailyLimit} 회<br/>
-                        상점 이용: <strong>{Math.max(0, config.shopLimit - player.dailyShopCount)}</strong> / {config.shopLimit} 회
-                    </div>
-                    <div className="mb-6 flex justify-center">
-                        <button onClick={() => { audioManager.playClickSfx(); if(hardModeUnlocked) setIsHardMode(!isHardMode); }} className={`px-8 py-3 rounded-2xl font-black text-xl flex items-center gap-3 transition-all ${!hardModeUnlocked ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : isHardMode ? 'bg-red-500 text-white shadow-red-300 shadow-lg scale-105' : 'bg-white border-2 border-red-500 text-red-500 hover:bg-red-50'}`}>
-                            {isHardMode ? <i className="fa-solid fa-fire animate-pulse"></i> : <i className="fa-solid fa-lock-open"></i>}
-                            {isHardMode ? "하드 모드 ON" : "하드 모드 OFF"}
-                            {!hardModeUnlocked && <span className="text-xs font-normal ml-2">(누적 {config.hardModeCost}개 필요)</span>}
-                        </button>
-                    </div>
-                    <Button onClick={startGame} variant="accent" className={`py-8 text-3xl mb-6 ${isHardMode ? 'bg-gradient-to-br from-red-600 to-red-800 ring-4 ring-red-300' : ''}`}>{isHardMode ? "🔥 하드모드 시작" : "▶ 게임 시작"}</Button>
+                    <Button onClick={openGameModeSelect} variant="accent" className="py-8 text-3xl mb-6">▶ 게임 시작</Button>
                     <div className="grid grid-cols-2 gap-4">
                         <Button onClick={() => setView(AppView.SHOP)} variant="secondary" className="text-xl"><i className="fa-solid fa-shop"></i> 상점</Button>
                         <Button onClick={() => setView(AppView.WARDROBE)} variant="secondary" className="text-xl bg-purple-500 text-white"><i className="fa-solid fa-shirt"></i> 옷장</Button>
