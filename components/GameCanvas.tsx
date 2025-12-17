@@ -310,7 +310,9 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ playerState, config, onGameOver
         });
         ctx.restore();
 
-        const groundY = canvas.height - 100;
+        // ** Shift game world up by 10px (was 100) **
+        const groundY = canvas.height - 110; 
+        
         ctx.save(); 
         hills.current.forEach((hill, i) => {
             hill.x -= currentSpeed * 0.3;
@@ -518,7 +520,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ playerState, config, onGameOver
         </div>
         <div className={`absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 text-5xl md:text-7xl font-black text-yellow-300 italic transition-all duration-300 pointer-events-none z-50 ${isSpeedAlert ? 'opacity-100 scale-125' : 'opacity-0 scale-75'}`} style={{textShadow: '0 0 20px #ff6f00, 4px 4px 0 #bf360c'}}>⚡ 스피드 업!</div>
         {/* Controls */}
-        <div className="absolute bottom-6 right-6 z-20">
+        <div className="absolute bottom-[54px] right-6 z-20">
             {/* Added touch-none class and simplified handlers to prevent zoom/delay/double-tap issues */}
             <button className="w-24 h-24 md:w-32 md:h-32 bg-white/20 border-4 border-white/60 rounded-full flex items-center justify-center text-white text-3xl backdrop-blur-md shadow-2xl active:scale-95 active:bg-white/40 transition-transform touch-none" 
                 onTouchStart={handleJumpStart} 
@@ -529,7 +531,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ playerState, config, onGameOver
                 <i className="fa-solid fa-arrow-up text-4xl md:text-5xl drop-shadow-md"></i>
             </button>
         </div>
-        <div className="absolute bottom-6 left-6 z-20">
+        <div className="absolute bottom-[54px] left-6 z-20">
             <button className="w-20 h-20 md:w-24 md:h-24 bg-white/20 border-4 border-white/60 rounded-full flex items-center justify-center text-white text-2xl backdrop-blur-md shadow-2xl active:scale-95 active:bg-white/40 transition-transform touch-none" 
                 onTouchStart={handleSlideStartInput} 
                 onTouchEnd={handleSlideEndInput} 
