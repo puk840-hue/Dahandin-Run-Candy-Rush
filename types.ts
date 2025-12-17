@@ -72,6 +72,7 @@ export interface GameConfig {
   dailyLimit: number;
   shopLimit: number;
   hardModeCost: number; // New: threshold to unlock hard mode
+  exchangeRate: number; // New: Candies needed for 1 Cookie
 }
 
 export interface GameObject {

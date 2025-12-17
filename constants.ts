@@ -78,5 +78,6 @@ export const INITIAL_CONFIG = {
     priceGacha: 10,   
     dailyLimit: 5,    
     shopLimit: 1,
-    hardModeCost: 200 // Default cost to unlock hard mode
+    hardModeCost: 200, // Default cost to unlock hard mode
+    exchangeRate: 10   // 10 Candies = 1 Cookie
 };

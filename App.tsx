@@ -100,6 +100,12 @@ const App: React.FC = () => {
     const [wardrobeTab, setWardrobeTab] = useState<'hat' | 'weapon' | 'clothes' | 'shoes'>('hat');
     const [helpOpen, setHelpOpen] = useState(false);
     const [showWalletLog, setShowWalletLog] = useState(false);
+    
+    // New States for Features
+    const [showTutorial, setShowTutorial] = useState(false);
+    const [showExchange, setShowExchange] = useState(false);
+    const [exchangeAmount, setExchangeAmount] = useState(1);
+    const [showShopInfo, setShowShopInfo] = useState(false);
 
     // Initialization
     useEffect(() => {
@@ -118,6 +124,13 @@ const App: React.FC = () => {
             }
         }
     }, []);
+
+    // Shop Intro Modal Trigger
+    useEffect(() => {
+        if (view === AppView.SHOP) {
+            setShowShopInfo(true);
+        }
+    }, [view]);
 
     // --- Actions ---
 
@@ -215,7 +228,9 @@ const App: React.FC = () => {
                     dailyShopCount: dailyShop,
                     lastGamingDate: today
                 });
-                setView(AppView.LOBBY);
+                
+                // Instead of going directly to Lobby, show Tutorial
+                setShowTutorial(true);
             }
         } catch (e) { alert("로그인 중 오류가 발생했습니다."); }
     };
@@ -226,6 +241,11 @@ const App: React.FC = () => {
         setConfig(prev => ({...prev, dailyLimit: 999, shopLimit: 999}));
         setView(AppView.LOBBY);
     };
+
+    const handleTutorialComplete = () => {
+        setShowTutorial(false);
+        setView(AppView.LOBBY);
+    }
 
     const startGame = () => {
         if (player.mode === 'student') {
@@ -259,7 +279,6 @@ const App: React.FC = () => {
     };
 
     const handleAddScore = (amount: number) => {
-        // Only updates total candies record, NOT wallet (cookies)
         setPlayer(prev => {
             const next = { 
                 ...prev, 
@@ -268,6 +287,33 @@ const App: React.FC = () => {
             savePlayerData(next);
             return next;
         });
+    };
+
+    const handleExchange = () => {
+        const cost = exchangeAmount * config.exchangeRate;
+        if (player.totalCandies >= cost) {
+            const newLog: TransactionLog = {
+                id: Date.now().toString(),
+                date: new Date().toLocaleString(),
+                desc: `환전 (쿠키 ${exchangeAmount}개 구매)`,
+                amount: exchangeAmount
+            };
+            
+            const updated = {
+                ...player,
+                totalCandies: player.totalCandies - cost,
+                wallet: player.wallet + exchangeAmount,
+                logs: [newLog, ...(player.logs || [])]
+            };
+            setPlayer(updated);
+            savePlayerData(updated);
+            audioManager.playClickSfx();
+            alert("환전이 완료되었습니다!");
+            setShowExchange(false);
+            setExchangeAmount(1);
+        } else {
+            alert("보유한 캔디가 부족합니다.");
+        }
     };
 
     const buyUpgrade = () => {
@@ -409,14 +455,12 @@ const App: React.FC = () => {
                     {/* Right: 30% Menu Actions */}
                     <div className="w-full md:w-[30%] h-[50%] md:h-full bg-black/30 backdrop-blur-xl border-l border-white/10 flex flex-col items-center justify-center p-8 z-20 shadow-2xl relative">
                         {/* Title Group */}
-                        <div className="mb-10 text-center group">
-                            <div className="relative inline-block flex flex-col gap-2">
-                                <h1 className="text-6xl md:text-7xl font-black text-transparent bg-clip-text bg-gradient-to-br from-amber-300 via-orange-400 to-red-500 drop-shadow-2xl tracking-tighter" style={{ textShadow: '0 4px 20px rgba(255, 160, 0, 0.5)' }}>
-                                    다했니 런
-                                </h1>
-                                <span className="block text-4xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-br from-white via-gray-200 to-gray-400 tracking-widest mt-2" style={{ textShadow: '0 0 20px rgba(255,255,255,0.3)' }}>
-                                    리마스터
-                                </span>
+                        <div className="mb-12 text-center group">
+                            <h1 className="text-5xl md:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-br from-amber-300 via-orange-400 to-red-500 drop-shadow-2xl tracking-tighter mb-2" style={{ textShadow: '0 4px 20px rgba(255, 160, 0, 0.5)' }}>
+                                다했니 런
+                            </h1>
+                            <div className="inline-block px-4 py-1 rounded-full bg-white/10 border border-white/20 mt-2 backdrop-blur-sm">
+                                <span className="text-sm md:text-base font-bold text-white tracking-[0.3em] drop-shadow-md">REMASTERED</span>
                             </div>
                         </div>
 
@@ -481,6 +525,44 @@ const App: React.FC = () => {
                 </div>
             )}
 
+             {/* Tutorial Modal (Shown after Login) */}
+             {showTutorial && (
+                 <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fade-in" onClick={() => {}}>
+                     <div className="bg-white text-gray-800 p-8 rounded-3xl max-w-2xl w-full relative max-h-[90vh] overflow-y-auto">
+                         <div className="text-center mb-6">
+                             <h2 className="text-3xl font-black mb-2 text-amber-600">🎉 환영합니다!</h2>
+                             <p className="text-gray-500 font-bold">대기실(로비) 사용 설명서</p>
+                         </div>
+                         <div className="space-y-6 text-left">
+                             <div className="flex gap-4 items-start bg-orange-50 p-4 rounded-xl">
+                                 <div className="bg-orange-100 p-3 rounded-full text-2xl text-orange-600"><i className="fa-solid fa-wallet"></i></div>
+                                 <div>
+                                     <h3 className="font-bold text-lg">내 지갑 (쿠키)</h3>
+                                     <p className="text-gray-600 text-sm">현재 보유한 쿠키 개수입니다. 클릭하면 쿠키 사용 내역을 볼 수 있습니다. 쿠키로 상점에서 아이템을 사거나 레벨업을 할 수 있습니다.</p>
+                                 </div>
+                             </div>
+                             <div className="flex gap-4 items-start bg-purple-50 p-4 rounded-xl">
+                                 <div className="bg-purple-100 p-3 rounded-full text-2xl text-purple-600"><i className="fa-solid fa-candy-cane"></i></div>
+                                 <div>
+                                     <h3 className="font-bold text-lg">보유 캔디 (환전소)</h3>
+                                     <p className="text-gray-600 text-sm">게임 플레이로 모은 캔디입니다. <strong>클릭하면 쿠키로 환전</strong>할 수 있습니다. 캔디를 모으면 하드모드가 해금됩니다.</p>
+                                 </div>
+                             </div>
+                             <div className="flex gap-4 items-start bg-blue-50 p-4 rounded-xl">
+                                 <div className="bg-blue-100 p-3 rounded-full text-2xl text-blue-600"><i className="fa-solid fa-shop"></i></div>
+                                 <div>
+                                     <h3 className="font-bold text-lg">상점과 옷장</h3>
+                                     <p className="text-gray-600 text-sm">상점에서 뽑기를 통해 캐릭터를 꾸밀 아이템을 획득하고, 옷장에서 착용할 수 있습니다.</p>
+                                 </div>
+                             </div>
+                         </div>
+                         <div className="mt-8 text-center">
+                             <Button onClick={handleTutorialComplete} variant="primary" className="text-xl py-4 w-full">확인했습니다! (입장하기)</Button>
+                         </div>
+                     </div>
+                 </div>
+            )}
+
             {/* Teacher Config View (Optimized with Dark Theme) */}
             {view === AppView.TEACHER && (
                 <Panel title="⚙️ 선생님 설정" className="max-w-4xl h-auto !bg-slate-900/95 !border-slate-700">
@@ -495,6 +577,7 @@ const App: React.FC = () => {
                             <div><label className="block text-xl font-bold text-white mb-3"><i className="fa-solid fa-arrow-up-right-dots mr-2 text-green-500"></i>업그레이드 비용</label><input type="number" className="w-full h-14 px-4 text-xl border-2 border-slate-600 bg-slate-800 text-white rounded-2xl" value={config.priceUpgrade} onChange={(e) => setConfig({...config, priceUpgrade: parseInt(e.target.value)})} /></div>
                             <div><label className="block text-xl font-bold text-white mb-3"><i className="fa-solid fa-dice mr-2 text-purple-500"></i>뽑기 비용</label><input type="number" className="w-full h-14 px-4 text-xl border-2 border-slate-600 bg-slate-800 text-white rounded-2xl" value={config.priceGacha} onChange={(e) => setConfig({...config, priceGacha: parseInt(e.target.value)})} /></div>
                             <div><label className="block text-xl font-bold text-white mb-3"><i className="fa-solid fa-lock-open mr-2 text-red-500"></i>하드모드 해금 비용</label><input type="number" className="w-full h-14 px-4 text-xl border-2 border-slate-600 bg-slate-800 text-white rounded-2xl" value={config.hardModeCost} onChange={(e) => setConfig({...config, hardModeCost: parseInt(e.target.value)})} /></div>
+                            <div><label className="block text-xl font-bold text-white mb-3"><i className="fa-solid fa-right-left mr-2 text-yellow-500"></i>캔디 환율 (캔디 N개 = 쿠키 1개)</label><input type="number" className="w-full h-14 px-4 text-xl border-2 border-slate-600 bg-slate-800 text-white rounded-2xl" value={config.exchangeRate} onChange={(e) => setConfig({...config, exchangeRate: parseInt(e.target.value)})} /></div>
                         </div>
                         <div className="pt-6 border-t border-slate-700 flex flex-col gap-3">
                             <Button onClick={handleGenerateLink} variant="accent" className="text-xl py-4">✨ 설정 저장 및 매직 링크 복사</Button>
@@ -522,9 +605,10 @@ const App: React.FC = () => {
                             <div className="text-4xl font-black text-orange-600">{player.wallet} <span className="text-lg">쿠키</span></div>
                             <div className="absolute top-2 right-2 text-orange-400 opacity-50 group-hover:opacity-100"><i className="fa-solid fa-list-ul"></i></div>
                         </div>
-                        <div className="flex-1 bg-purple-100 p-6 rounded-3xl shadow-inner">
-                             <div className="text-purple-800 font-bold flex items-center justify-center gap-3 text-xl mb-2"><i className="fa-solid fa-candy-cane"></i> 누적 획득</div>
+                        <div className="flex-1 bg-purple-100 p-6 rounded-3xl shadow-inner cursor-pointer hover:bg-purple-200 transition-colors relative group" onClick={() => setShowExchange(true)}>
+                             <div className="text-purple-800 font-bold flex items-center justify-center gap-3 text-xl mb-2"><i className="fa-solid fa-candy-cane"></i> 보유 캔디</div>
                             <div className="text-4xl font-black text-purple-600">{player.totalCandies} <span className="text-lg">개</span></div>
+                            <div className="absolute top-2 right-2 text-purple-400 opacity-50 group-hover:opacity-100"><i className="fa-solid fa-right-left"></i></div>
                         </div>
                     </div>
                     
@@ -558,6 +642,31 @@ const App: React.FC = () => {
                         </div>
                     )}
 
+                    {showExchange && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setShowExchange(false)}>
+                            <div className="bg-white p-8 rounded-3xl w-[90%] max-w-md shadow-2xl text-center relative" onClick={e => e.stopPropagation()}>
+                                <h3 className="text-2xl font-black text-purple-800 mb-6">🍬 캔디 환전소</h3>
+                                <div className="bg-gray-100 p-4 rounded-xl mb-6">
+                                    <p className="text-gray-500 font-bold mb-1">현재 환율</p>
+                                    <p className="text-lg font-bold">캔디 <span className="text-purple-600">{config.exchangeRate}개</span> = 쿠키 <span className="text-orange-600">1개</span></p>
+                                </div>
+                                <div className="mb-6">
+                                    <label className="block text-gray-600 font-bold mb-2">구매할 쿠키 개수</label>
+                                    <div className="flex items-center justify-center gap-4">
+                                        <button onClick={() => setExchangeAmount(Math.max(1, exchangeAmount - 1))} className="w-10 h-10 rounded-full bg-gray-200 hover:bg-gray-300 font-bold text-xl">-</button>
+                                        <span className="text-3xl font-black w-16">{exchangeAmount}</span>
+                                        <button onClick={() => setExchangeAmount(exchangeAmount + 1)} className="w-10 h-10 rounded-full bg-gray-200 hover:bg-gray-300 font-bold text-xl">+</button>
+                                    </div>
+                                    <p className="mt-4 text-gray-500">
+                                        필요한 캔디: <span className="font-bold text-purple-600">{exchangeAmount * config.exchangeRate}</span>개
+                                    </p>
+                                </div>
+                                <Button onClick={handleExchange} variant="primary" disabled={player.totalCandies < exchangeAmount * config.exchangeRate} className={player.totalCandies < exchangeAmount * config.exchangeRate ? 'opacity-50 cursor-not-allowed' : ''}>환전하기</Button>
+                                <button onClick={() => setShowExchange(false)} className="mt-4 text-gray-400 hover:text-gray-600 font-bold">취소</button>
+                            </div>
+                        </div>
+                    )}
+
                     <div className="bg-blue-50 p-4 rounded-2xl mb-6 text-blue-800 text-lg">
                         오늘의 도전: <strong>{Math.max(0, config.dailyLimit - player.dailyPlayCount)}</strong> / {config.dailyLimit} 회<br/>
                         상점 이용: <strong>{Math.max(0, config.shopLimit - player.dailyShopCount)}</strong> / {config.shopLimit} 회
@@ -582,20 +691,49 @@ const App: React.FC = () => {
             {/* Shop View */}
             {view === AppView.SHOP && (
                 <Panel title="🛒 아이템 상점" className="max-w-4xl">
+                     {/* Shop Intro Modal */}
+                     {showShopInfo && (
+                        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setShowShopInfo(false)}>
+                            <div className="bg-white p-8 rounded-3xl w-[95%] max-w-2xl shadow-2xl relative max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                                <h3 className="text-2xl font-black text-gray-800 mb-4 text-center">🎁 오늘의 뽑기 라인업</h3>
+                                <div className="grid grid-cols-2 gap-4 text-left">
+                                    <div className="bg-blue-50 p-4 rounded-xl">
+                                        <div className="font-bold text-blue-600 mb-2">🧢 모자</div>
+                                        <div className="text-sm text-gray-600 leading-relaxed">{GAME_ITEMS.hats.map(i => ITEM_NAMES[i]).join(', ')}</div>
+                                    </div>
+                                    <div className="bg-red-50 p-4 rounded-xl">
+                                        <div className="font-bold text-red-600 mb-2">⚔️ 무기</div>
+                                        <div className="text-sm text-gray-600 leading-relaxed">{GAME_ITEMS.weapons.map(i => ITEM_NAMES[i]).join(', ')}</div>
+                                    </div>
+                                    <div className="bg-green-50 p-4 rounded-xl">
+                                        <div className="font-bold text-green-600 mb-2">👗 옷</div>
+                                        <div className="text-sm text-gray-600 leading-relaxed">{GAME_ITEMS.clothes.map(i => ITEM_NAMES[i]).join(', ')}</div>
+                                    </div>
+                                    <div className="bg-yellow-50 p-4 rounded-xl">
+                                        <div className="font-bold text-yellow-600 mb-2">👟 신발</div>
+                                        <div className="text-sm text-gray-600 leading-relaxed">{GAME_ITEMS.shoes.map(i => ITEM_NAMES[i]).join(', ')}</div>
+                                    </div>
+                                </div>
+                                <div className="mt-6 text-center">
+                                    <Button onClick={() => setShowShopInfo(false)} variant="primary" className="py-3">확인</Button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     <div className="text-gray-500 font-bold mb-4 text-center bg-gray-100 py-2 rounded-xl">
                         오늘 상점 이용 가능 횟수: <span className="text-pink-600">{Math.max(0, config.shopLimit - player.dailyShopCount)}</span> / {config.shopLimit}
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
                         <div className="bg-white p-6 rounded-3xl shadow-lg border-2 border-gray-100 flex flex-col items-center hover:-translate-y-1 transition-transform">
                             <div className="w-24 h-24 bg-amber-100 rounded-full flex items-center justify-center mb-4 text-5xl">⚡</div>
-                            <h3 className="text-2xl font-black text-gray-800 mb-1">점수 부스터</h3>
+                            <h3 className="text-2xl font-black text-gray-800 mb-1">캔디 업그레이드</h3>
                             <p className="text-gray-500 font-bold mb-4">현재 Lv.{player.level} (+{player.level}점)</p>
                             <div className="mt-auto w-full">
                                 <Button onClick={buyUpgrade} variant="primary" className="mb-0">
                                     강화 {player.level * config.priceUpgrade}🍪
                                 </Button>
                             </div>
-                            <div className="mt-4 opacity-50"><CandyIcon idx={0} size={25} /></div>
                         </div>
                         <div className="bg-white p-6 rounded-3xl shadow-lg border-2 border-gray-100 flex flex-col items-center hover:-translate-y-1 transition-transform">
                              <div className="w-24 h-24 bg-purple-100 rounded-full flex items-center justify-center mb-4 text-5xl">🎁</div>
@@ -606,7 +744,6 @@ const App: React.FC = () => {
                                     뽑기 {config.priceGacha}🍪
                                 </Button>
                             </div>
-                            <div className="mt-4 text-4xl">⚔️🧢👗👟</div>
                         </div>
                     </div>
                     <Button onClick={() => setView(AppView.LOBBY)} variant="secondary">로비로 돌아가기</Button>

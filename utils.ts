@@ -399,33 +399,91 @@ export const drawCharacter = (
     // Body
     ctx.fillStyle = grad; 
     ctx.strokeStyle = "#5d4037"; ctx.lineWidth = 2.5;
+    
+    // Draw body skin first
     ctx.beginPath(); ctx.roundRect(-8, -15, 16, 30, 8); ctx.fill(); ctx.stroke();
 
-    // Clothes
+    // Clothes Logic - Side View & Body Fit
     if (equipped.clothes) {
-        if (equipped.clothes === 'overalls') {
-            ctx.fillStyle = "#1976d2";
-            ctx.fillRect(-8, -5, 16, 20);
-            ctx.fillStyle = "#1565c0"; ctx.fillRect(-6, -10, 4, 10); ctx.fillRect(2, -10, 4, 10);
-        } else if (equipped.clothes === 'suit') {
-            ctx.fillStyle = "#212121"; ctx.fillRect(-8, -15, 16, 30);
-            ctx.fillStyle = "white"; ctx.beginPath(); ctx.moveTo(-2, -15); ctx.lineTo(0, -5); ctx.lineTo(2, -15); ctx.fill();
-            ctx.fillStyle = "red"; ctx.fillRect(-1, -10, 2, 5);
-        } else if (equipped.clothes === 'dress') {
-            ctx.fillStyle = "#e91e63"; ctx.beginPath(); ctx.moveTo(-8, -15); ctx.lineTo(8, -15); ctx.lineTo(12, 15); ctx.lineTo(-12, 15); ctx.fill();
-        } else if (equipped.clothes === 'hoodie') {
-            ctx.fillStyle = "#757575"; ctx.fillRect(-9, -15, 18, 25); ctx.fillStyle="#bdbdbd"; ctx.fillRect(-6, -5, 12, 10);
-        } else if (equipped.clothes === 'tuxedo') {
-            ctx.fillStyle = "black"; ctx.fillRect(-8, -15, 16, 30); ctx.fillStyle="white"; ctx.fillRect(-3, -15, 6, 20); ctx.fillStyle="black"; ctx.fillRect(-2, -12, 4, 2);
-        } else if (equipped.clothes === 'raincoat') {
-            ctx.fillStyle = "#ffeb3b"; ctx.beginPath(); ctx.moveTo(-8, -15); ctx.lineTo(8, -15); ctx.lineTo(10, 15); ctx.lineTo(-10, 15); ctx.fill();
-        } else if (equipped.clothes === 'armor') {
-            ctx.fillStyle = "#b0bec5"; ctx.fillRect(-9, -15, 18, 30); ctx.fillStyle="#78909c"; ctx.fillRect(-5, -5, 10, 10);
-        } else if (equipped.clothes === 'jersey') {
-            ctx.fillStyle = "#0d47a1"; ctx.fillRect(-8, -15, 16, 30); ctx.fillStyle="white"; ctx.font="8px Arial"; ctx.fillText("7", -2, -2);
-        } else if (equipped.clothes === 'hanbok') {
-            ctx.fillStyle = "#f48fb1"; ctx.beginPath(); ctx.moveTo(-8, -15); ctx.lineTo(8, -15); ctx.lineTo(12, 15); ctx.lineTo(-12, 15); ctx.fill();
-            ctx.fillStyle = "#ce93d8"; ctx.fillRect(-8, -15, 16, 12); ctx.fillStyle="white"; ctx.fillRect(-2, -15, 4, 12);
+        // TIGHT CLOTHES (Clip to Body)
+        if (['overalls', 'suit', 'hoodie', 'tuxedo', 'armor', 'jersey', 'hanbok', 'dress', 'raincoat'].includes(equipped.clothes)) {
+             ctx.save();
+             // Clip to the round body shape for tight fitting items
+             
+             if (['overalls', 'suit', 'hoodie', 'armor', 'jersey'].includes(equipped.clothes)) {
+                 ctx.beginPath(); ctx.roundRect(-8, -15, 16, 30, 8); ctx.clip();
+             }
+
+             if (equipped.clothes === 'overalls') {
+                 // Pants
+                 ctx.fillStyle = "#1976d2"; ctx.fillRect(-8, 0, 16, 15);
+                 // Bib (Side view - Strap + Front)
+                 ctx.fillRect(-8, -5, 16, 20); 
+                 ctx.fillStyle = "#1565c0"; ctx.beginPath(); ctx.arc(0, 0, 3, 0, Math.PI*2); ctx.fill(); // Button
+             } 
+             else if (equipped.clothes === 'suit') {
+                 ctx.fillStyle = "#212121"; ctx.fillRect(-8, -15, 16, 30);
+                 // White shirt showing at neck/front
+                 ctx.fillStyle = "white"; ctx.beginPath(); ctx.moveTo(8, -15); ctx.lineTo(8, -5); ctx.lineTo(0, -15); ctx.fill();
+                 ctx.fillStyle = "red"; ctx.fillRect(6, -10, 2, 5); // Tie hint
+             }
+             else if (equipped.clothes === 'hoodie') {
+                ctx.fillStyle = "#757575"; ctx.fillRect(-8, -15, 16, 30);
+                // Hood bump on back (Left side)
+                ctx.beginPath(); ctx.moveTo(-8, -15); ctx.quadraticCurveTo(-12, -10, -8, -5); ctx.fill();
+                // Pocket line
+                ctx.fillStyle = "#616161"; ctx.fillRect(0, 5, 8, 8);
+             }
+             else if (equipped.clothes === 'armor') {
+                ctx.fillStyle = "#b0bec5"; ctx.fillRect(-8, -15, 16, 30);
+                ctx.fillStyle = "#78909c"; ctx.fillRect(-4, -5, 8, 10); // Plate detail
+             }
+             else if (equipped.clothes === 'jersey') {
+                ctx.fillStyle = "#0d47a1"; ctx.fillRect(-8, -15, 16, 30);
+                ctx.fillStyle = "white"; ctx.font="bold 10px Arial"; ctx.fillText("7", -2, 5);
+             }
+             ctx.restore();
+
+             // LOOSE CLOTHES (Draw Over Body)
+             if (equipped.clothes === 'tuxedo') {
+                 // Body part (clipped manually by drawing inside)
+                 ctx.save();
+                 ctx.beginPath(); ctx.roundRect(-8, -15, 16, 30, 8); ctx.clip();
+                 ctx.fillStyle = "black"; ctx.fillRect(-8, -15, 16, 30);
+                 ctx.fillStyle = "white"; ctx.fillRect(0, -15, 8, 20); // Front shirt
+                 ctx.restore();
+                 // Tailcoat (extends back/left)
+                 ctx.fillStyle = "black"; ctx.beginPath(); ctx.moveTo(-5, 5); ctx.lineTo(-12, 15); ctx.lineTo(-5, 15); ctx.fill();
+             }
+             else if (equipped.clothes === 'dress') {
+                 // Top part (tight)
+                 ctx.save(); ctx.beginPath(); ctx.roundRect(-8, -15, 16, 15, 8); ctx.clip();
+                 ctx.fillStyle = "#e91e63"; ctx.fillRect(-8, -15, 16, 30);
+                 ctx.restore();
+                 // Skirt part (flares out)
+                 ctx.fillStyle = "#e91e63"; 
+                 ctx.beginPath(); ctx.moveTo(-6, 0); ctx.lineTo(6, 0); ctx.lineTo(10, 15); ctx.quadraticCurveTo(0, 18, -10, 15); ctx.fill();
+             }
+             else if (equipped.clothes === 'raincoat') {
+                 // Round Poncho shape (covering body)
+                 ctx.fillStyle = "#ffeb3b";
+                 // Draw a circle/oval shape that covers the body rect
+                 ctx.beginPath(); 
+                 ctx.ellipse(0, -5, 12, 20, 0, 0, Math.PI*2); 
+                 ctx.fill();
+                 // Hood detail (small line)
+                 ctx.strokeStyle = "#fbc02d"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(-5, -20); ctx.lineTo(0, -23); ctx.stroke();
+             }
+             else if (equipped.clothes === 'hanbok') {
+                 // Jeogori (Top) - Short jacket
+                 ctx.fillStyle = "#ce93d8"; 
+                 ctx.save(); ctx.beginPath(); ctx.roundRect(-8, -15, 16, 12, 8); ctx.clip(); ctx.fillRect(-8, -15, 16, 30); ctx.restore();
+                 // Chima/Baji (Bottom) - Flared
+                 ctx.fillStyle = "#f48fb1"; 
+                 ctx.beginPath(); ctx.moveTo(-7, -3); ctx.lineTo(7, -3); ctx.lineTo(11, 15); ctx.quadraticCurveTo(0, 18, -11, 15); ctx.fill();
+                 // Tie detail
+                 ctx.fillStyle = "#ef5350"; ctx.fillRect(2, -5, 4, 8);
+             }
         }
     }
 
@@ -439,6 +497,25 @@ export const drawCharacter = (
         ctx.beginPath();
         ctx.roundRect(-3.5, 0, 7, 18, 3.5);
         ctx.fill(); ctx.stroke();
+
+        // Sleeve (If clothes equipped)
+        if (equipped.clothes) {
+             ctx.save(); ctx.clip(); // Clip to arm shape
+             if (['overalls', 'suit', 'hoodie', 'tuxedo', 'armor', 'jersey', 'raincoat', 'hanbok'].includes(equipped.clothes)) {
+                 if(equipped.clothes === 'overalls') ctx.fillStyle = "#1565c0"; // Blue shirt under?
+                 else if(equipped.clothes === 'suit' || equipped.clothes === 'tuxedo') ctx.fillStyle = "black";
+                 else if(equipped.clothes === 'hoodie') ctx.fillStyle = "#757575";
+                 else if(equipped.clothes === 'armor') ctx.fillStyle = "#b0bec5";
+                 else if(equipped.clothes === 'jersey') ctx.fillStyle = "#0d47a1";
+                 else if(equipped.clothes === 'raincoat') ctx.fillStyle = "#ffeb3b";
+                 else if(equipped.clothes === 'hanbok') ctx.fillStyle = "#ce93d8";
+                 
+                 // Sleeve usually covers top half of arm
+                 if (equipped.clothes !== 'overalls') ctx.fillRect(-5, 0, 10, 12); 
+                 else ctx.fillRect(-5, 0, 10, 4); // Short sleeve for overalls
+             }
+             ctx.restore();
+        }
 
         // Weapon Handling
         if (equipped.weapon) {
@@ -525,12 +602,18 @@ export const drawCharacter = (
         } else if (equipped.hat === 'helmet') {
              ctx.fillStyle = "#ffeb3b"; ctx.beginPath(); ctx.arc(2, -32, 15, Math.PI, 0); ctx.fill(); ctx.fillRect(-13, -32, 26, 4);
         } else if (equipped.hat === 'beret') {
-             ctx.fillStyle = "#d32f2f"; ctx.beginPath(); ctx.ellipse(2, -35, 16, 10, 0.2, 0, Math.PI*2); ctx.fill(); ctx.fillRect(0,-45, 2, 6);
+             // Moved up: y-45 instead of y-35 base, adjust ellipse
+             ctx.fillStyle = "#d32f2f"; ctx.beginPath(); ctx.ellipse(2, -40, 16, 10, 0.2, 0, Math.PI*2); ctx.fill(); ctx.fillRect(0,-50, 2, 6);
         } else if (equipped.hat === 'partyhat') {
              ctx.fillStyle = "#ab47bc"; ctx.beginPath(); ctx.moveTo(-8, -32); ctx.lineTo(12, -32); ctx.lineTo(2, -55); ctx.fill();
         } else if (equipped.hat === 'headphone') {
-            ctx.strokeStyle = "#333"; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(2, -26, 16, Math.PI, 0); ctx.stroke();
-            ctx.fillStyle = "#ef5350"; ctx.fillRect(-14, -30, 6, 10); ctx.fillRect(12, -30, 6, 10);
+            // Side view: Band over head, one cup visible
+            ctx.strokeStyle = "#333"; ctx.lineWidth = 4; 
+            ctx.beginPath(); ctx.arc(2, -26, 17, Math.PI, 0); ctx.stroke(); // Band
+            ctx.fillStyle = "#ef5350"; 
+            ctx.beginPath(); ctx.arc(2, -26, 8, 0, Math.PI*2); ctx.fill(); // Cup
+            ctx.fillStyle = "#333"; 
+            ctx.beginPath(); ctx.arc(2, -26, 4, 0, Math.PI*2); ctx.fill(); // Detail
         } else if (equipped.hat === 'flower') {
             ctx.fillStyle = "#ff4081"; ctx.beginPath(); ctx.arc(10, -35, 5, 0, Math.PI*2); ctx.fill();
             ctx.fillStyle = "white"; ctx.beginPath(); ctx.arc(10, -35, 2, 0, Math.PI*2); ctx.fill();
