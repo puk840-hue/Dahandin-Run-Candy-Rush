@@ -76,13 +76,14 @@ const App: React.FC = () => {
     const [showTitleSelect, setShowTitleSelect] = useState(false);
     const [showGameModeSelect, setShowGameModeSelect] = useState(false);
     const [purchaseFeedback, setPurchaseFeedback] = useState<{ message: string, subMessage?: string, icon: string } | null>(null);
-    const [showTutorial, setShowTutorial] = useState(false);
     const [isGameOverOpen, setGameOverOpen] = useState(false);
     const [showGameIntro, setShowGameIntro] = useState(false);
     const [showMagicLinkModal, setShowMagicLinkModal] = useState<string | null>(null);
+    
+    // 상점 이용 추적용 (구매 여부)
+    const [hasPurchasedInShop, setHasPurchasedInShop] = useState(false);
 
     const [recordsDiffTab, setRecordsDiffTab] = useState<'normal' | 'hard'>('normal');
-    const [recordsMetricTab, setRecordsMetricTab] = useState<'score' | 'time'>('score');
     const [wardrobeTab, setWardrobeTab] = useState<'hat' | 'weapon' | 'clothes' | 'shoes' | 'candy'>('hat');
 
     useEffect(() => {
@@ -136,15 +137,6 @@ const App: React.FC = () => {
         }
     };
 
-    const toggleTitle = (id: string) => {
-        setPlayer(prev => {
-            const nextTitle = prev.activeTitle === id ? null : id;
-            const updated = { ...prev, activeTitle: nextTitle };
-            savePlayerData(updated);
-            return updated;
-        });
-    };
-
     const handleAddScore = (amount: number) => {
         setPlayer(prev => {
             const updated = {
@@ -161,7 +153,8 @@ const App: React.FC = () => {
     };
 
     const handleStudentLogin = async () => {
-        const code = (document.getElementById('studentCode') as HTMLInputElement).value;
+        const codeInput = document.getElementById('studentCode') as HTMLInputElement;
+        const code = codeInput?.value;
         if (!code) return alert("학생 코드를 입력하세요.");
         let fetchedName = `학생 ${code.slice(-3)}`;
         let fetchedWallet = 100;
@@ -198,12 +191,11 @@ const App: React.FC = () => {
     };
 
     const startHardGame = () => {
-        if (player.mode === 'student' && player.dailyPlayCount >= config.dailyLimit) return alert("오늘의 도전 횟수를 모두 사용했어요!");
+        // 하드 모드는 일일 횟수를 차감하지 않음
         if (player.totalCandies < config.hardModeEntryCost) return alert(`하드모드 입장을 위해 캔디 ${config.hardModeEntryCost}개가 필요합니다.`);
         setIsHardMode(true);
         const updated = { 
             ...player, 
-            dailyPlayCount: player.dailyPlayCount + 1,
             totalCandies: player.totalCandies - config.hardModeEntryCost,
             stats: { ...player.stats, totalHardModeCount: player.stats.totalHardModeCount + 1 }
         };
@@ -252,6 +244,7 @@ const App: React.FC = () => {
         };
         setPlayer(n); savePlayerData(n); 
         audioManager.playGachaSfx(); 
+        setHasPurchasedInShop(true); // 구매 발생 기록
         setPurchaseFeedback({ message: "선물 상자 도착!", subMessage: `${ITEM_NAMES[picked.item]}을(를) 획득했습니다!`, icon: "fa-gift" });
     };
 
@@ -266,6 +259,17 @@ const App: React.FC = () => {
         const url = new URL(window.location.href);
         url.searchParams.set('data', encrypted);
         setShowMagicLinkModal(url.toString());
+    };
+
+    // 상점에서 로비로 나갈 때 이용 횟수 차감 처리
+    const handleExitShop = () => {
+        if (hasPurchasedInShop) {
+            const updated = { ...player, dailyShopCount: player.dailyShopCount + 1 };
+            setPlayer(updated);
+            savePlayerData(updated);
+            setHasPurchasedInShop(false);
+        }
+        setView(AppView.LOBBY);
     };
 
     return (
@@ -320,7 +324,10 @@ const App: React.FC = () => {
                         <div className="w-full flex flex-col gap-4">
                             <Button onClick={() => setView(AppView.LOGIN)} variant="primary" className="py-5"><i className="fa-solid fa-user-graduate"></i> 학생 시작하기</Button>
                             {!isMagicLink && <Button onClick={() => setView(AppView.TEACHER)} variant="dark" className="py-4 bg-purple-600/80 hover:bg-purple-600 border-none"><i className="fa-solid fa-chalkboard-user"></i> 선생님 시작하기</Button>}
-                            <Button onClick={() => { setPlayer(p => ({...p, mode:'test', wallet:9999, totalCandies:9999, name:'테스트 유저'})); setView(AppView.LOBBY); }} variant="ghost" className="py-4"><i className="fa-solid fa-gamepad"></i> 테스트 모드로 체험하기</Button>
+                            {/* 매직 링크가 아닐 때만 테스트 모드 노출 */}
+                            {!isMagicLink && (
+                                <Button onClick={() => { setPlayer(p => ({...p, mode:'test', wallet:9999, totalCandies:9999, name:'테스트 유저'})); setView(AppView.LOBBY); }} variant="ghost" className="py-4"><i className="fa-solid fa-gamepad"></i> 테스트 모드로 체험하기</Button>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -421,7 +428,6 @@ const App: React.FC = () => {
                     <div className="bg-white rounded-[24px] p-8 w-full max-w-md shadow-2xl relative border-t-8 border-blue-500">
                         <div className="flex flex-col items-center justify-center gap-2 mb-10 group">
                             <span className="text-2xl font-black text-slate-800 break-all text-center">{getFullPlayerName()}</span>
-                            <button onClick={() => setShowTitleSelect(true)} className="flex items-center gap-1 px-3 py-1 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 transition-colors text-xs font-bold"><i className="fa-solid fa-pencil"></i> 칭호 변경</button>
                         </div>
                         <div className="grid grid-cols-2 gap-5 mb-8">
                             <div onClick={() => setShowWalletLogs(true)} className="bg-orange-50 p-5 rounded-[24px] cursor-pointer hover:bg-orange-100 transition-colors border border-orange-200/50 shadow-sm relative text-center">
@@ -450,6 +456,7 @@ const App: React.FC = () => {
                             <Button onClick={() => {
                                 if (player.mode === 'student' && player.dailyShopCount >= config.shopLimit) return alert("오늘의 상점 이용 횟수를 모두 사용했어요!");
                                 setView(AppView.SHOP);
+                                setHasPurchasedInShop(false); // 상점 입장 시 초기화
                             }} variant="secondary" className="py-4 rounded-[20px] bg-slate-400"><i className="fa-solid fa-store"></i> 상점</Button>
                             <Button onClick={() => setView(AppView.WARDROBE)} variant="secondary" className="py-4 rounded-[20px] bg-slate-400"><i className="fa-solid fa-shirt"></i> 옷장</Button>
                         </div>
@@ -491,10 +498,15 @@ const App: React.FC = () => {
                         <div onClick={startNormalGame} className="bg-blue-50 p-8 rounded-[32px] border-4 border-blue-200 cursor-pointer hover:scale-105 transition-all text-center group">
                             <div className="text-6xl mb-4 group-hover:animate-bounce">🏃</div>
                             <h4 className="text-xl font-bold text-blue-800">일반 모드</h4>
+                            <p className="text-xs text-blue-400 mt-2 font-bold">도전 횟수 1회 소모</p>
                         </div>
                         <div onClick={startHardGame} className="bg-red-50 p-8 rounded-[32px] border-4 border-red-200 cursor-pointer hover:scale-105 transition-all text-center group">
                             <div className="text-6xl mb-4 group-hover:animate-bounce">🔥</div>
                             <h4 className="text-xl font-bold text-red-800">하드 모드</h4>
+                            {/* 하드모드 비용 표시 고도화 */}
+                            <div className="mt-2 bg-red-100 inline-block px-3 py-1 rounded-full border border-red-200">
+                                <span className="text-xs font-black text-red-600 italic">입장료: 🍬{config.hardModeEntryCost}</span>
+                            </div>
                         </div>
                     </div>
                 </Modal>
@@ -518,7 +530,7 @@ const App: React.FC = () => {
                                     const cost = player.level * config.priceUpgrade;
                                     if(player.wallet < cost) return alert("쿠키가 부족해요!");
                                     const n = { ...player, level: player.level + 1, wallet: player.wallet - cost, logs: [{ id: Date.now().toString(), date: new Date().toLocaleString(), desc: "캔디 강화", amount: -cost }, ...player.logs] };
-                                    setPlayer(n); savePlayerData(n); setPurchaseFeedback({ message: "강화 성공!", subMessage: `Lv.${n.level}로 강화되었습니다.`, icon: "fa-bolt" });
+                                    setPlayer(n); savePlayerData(n); setHasPurchasedInShop(true); setPurchaseFeedback({ message: "강화 성공!", subMessage: `Lv.${n.level}로 강화되었습니다.`, icon: "fa-bolt" });
                                 }} variant="accent" className="mt-auto mb-0 py-3 text-sm bg-amber-800 border-none">강화 {player.level * config.priceUpgrade}🍪</Button>
                             </div>
                             <div className="bg-slate-50 p-6 rounded-[32px] border border-slate-100 text-center flex flex-col items-center group hover:bg-white hover:shadow-xl transition-all">
@@ -530,7 +542,7 @@ const App: React.FC = () => {
                                     if(player.maxHearts >= 5) return alert("이미 최대치입니다.");
                                     if(player.wallet < config.priceHeartUpgrade) return alert("쿠키가 부족해요!");
                                     const n = { ...player, maxHearts: player.maxHearts + 1, wallet: player.wallet - config.priceHeartUpgrade, logs: [{ id: Date.now().toString(), date: new Date().toLocaleString(), desc: "하트 강화", amount: -config.priceHeartUpgrade }, ...player.logs] };
-                                    setPlayer(n); savePlayerData(n); setPurchaseFeedback({ message: "강화 성공!", subMessage: `하트가 ${n.maxHearts}개로 늘어났습니다.`, icon: "fa-heart" });
+                                    setPlayer(n); savePlayerData(n); setHasPurchasedInShop(true); setPurchaseFeedback({ message: "강화 성공!", subMessage: `하트가 ${n.maxHearts}개로 늘어났습니다.`, icon: "fa-heart" });
                                 }} variant="accent" className="mt-auto mb-0 py-3 text-sm bg-amber-800 border-none">강화 {config.priceHeartUpgrade}🍪</Button>
                             </div>
                             <div className="bg-slate-50 p-6 rounded-[32px] border border-slate-100 text-center flex flex-col items-center group hover:bg-white hover:shadow-xl transition-all">
@@ -542,7 +554,7 @@ const App: React.FC = () => {
                                     if(player.jumpBonus >= 10) return alert("이미 최대치입니다.");
                                     if(player.wallet < config.priceJumpUpgrade) return alert("쿠키가 부족해요!");
                                     const n = { ...player, jumpBonus: player.jumpBonus + 1, wallet: player.wallet - config.priceJumpUpgrade, logs: [{ id: Date.now().toString(), date: new Date().toLocaleString(), desc: "점프 강화", amount: -config.priceJumpUpgrade }, ...player.logs] };
-                                    setPlayer(n); savePlayerData(n); setPurchaseFeedback({ message: "강화 성공!", subMessage: `점프 보너스가 ${n.jumpBonus}점이 되었습니다.`, icon: "fa-arrow-up" });
+                                    setPlayer(n); savePlayerData(n); setHasPurchasedInShop(true); setPurchaseFeedback({ message: "강화 성공!", subMessage: `점프 보너스가 ${n.jumpBonus}점이 되었습니다.`, icon: "fa-arrow-up" });
                                 }} variant="accent" className="mt-auto mb-0 py-3 text-sm bg-amber-800 border-none">강화 {config.priceJumpUpgrade}🍪</Button>
                             </div>
                             <div className="bg-slate-50 p-6 rounded-[32px] border border-slate-100 text-center flex flex-col items-center group hover:bg-white hover:shadow-xl transition-all">
@@ -554,25 +566,7 @@ const App: React.FC = () => {
                             </div>
                         </div>
 
-                        {/* Gacha Lineup Display */}
-                        <div className="bg-slate-50 p-8 rounded-[32px] border border-slate-100 shrink-0">
-                            <h4 className="text-sm font-black text-slate-800 mb-4 flex items-center gap-2"><i className="fa-solid fa-layer-group text-blue-400"></i> 전체 뽑기 라인업</h4>
-                            <div className="grid grid-cols-4 gap-2">
-                                {(['hats', 'weapons', 'clothes', 'shoes'] as const).map(cat => (
-                                    <div key={cat} className="space-y-1">
-                                        <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{cat === 'hats' ? '모자' : cat === 'weapons' ? '무기' : cat === 'clothes' ? '의상' : '신발'}</div>
-                                        <div className="flex flex-wrap gap-1">
-                                            {GAME_ITEMS[cat].map(item => {
-                                                const has = player.inventory[cat].includes(item);
-                                                return <div key={item} title={ITEM_NAMES[item]} className={`w-3 h-3 rounded-sm ${has ? 'bg-blue-500' : 'bg-slate-200'}`} />;
-                                            })}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-
-                        <Button onClick={() => setView(AppView.LOBBY)} variant="secondary" className="py-4 bg-slate-500 rounded-[20px] max-w-sm mx-auto">로비로 돌아가기</Button>
+                        <Button onClick={handleExitShop} variant="secondary" className="py-4 bg-slate-500 rounded-[20px] max-w-sm mx-auto">로비로 돌아가기</Button>
                     </div>
                 </div>
             )}
@@ -650,7 +644,7 @@ const App: React.FC = () => {
                         <div className="flex-1 bg-slate-50 rounded-[32px] p-6 overflow-y-auto no-scrollbar">
                             {(() => {
                                 const filtered = player.records.filter(r => r.difficulty === recordsDiffTab);
-                                const sorted = [...filtered].sort((a, b) => recordsMetricTab === 'score' ? b.score - a.score : b.timeSec - a.timeSec);
+                                const sorted = [...filtered].sort((a, b) => b.score - a.score);
                                 if (sorted.length === 0) return <div className="py-20 text-center text-slate-300 font-bold italic">기록이 없습니다.</div>;
                                 return sorted.slice(0, 10).map((r, i) => (
                                     <div key={i} className="flex items-center justify-between py-4 border-b border-slate-200/50 last:border-0">
