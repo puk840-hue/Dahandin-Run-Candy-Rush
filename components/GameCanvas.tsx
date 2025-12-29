@@ -1,12 +1,13 @@
+
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { PlayerState, GameConfig, GameObject, Particle, Cloud } from '../types';
 import { BG_COLORS, ACHIEVEMENTS } from '../constants';
-import { drawCharacter, drawCandySimple, audioManager } from '../utils';
+import { drawCharacter, drawCandySimple, audioManager, darkenColor } from '../utils';
 
 interface GameCanvasProps {
   playerState: PlayerState;
   config: GameConfig;
-  onGameOver: (score: number, timeSec: number, fell: boolean) => void;
+  onGameOver: (score: number, candies: number, timeSec: number, fell: boolean) => void;
   onAddScore: (amount: number) => void;
   isPaused: boolean;
   isHardMode: boolean; 
@@ -14,258 +15,226 @@ interface GameCanvasProps {
 
 const GameCanvas: React.FC<GameCanvasProps> = ({ playerState, config, onGameOver, onAddScore, isPaused, isHardMode }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
   const [hudTime, setHudTime] = useState("00:00");
-  const [hudScore, setHudScore] = useState(0);
+  const [hudCandyCount, setHudCandyCount] = useState(0); 
+  const [hudTotalScore, setHudTotalScore] = useState(0); 
   const [hudStage, setHudStage] = useState(1);
+  const [hudHearts, setHudHearts] = useState(playerState.maxHearts);
   const [isSpeedAlert, setIsSpeedAlert] = useState(false);
 
-  // Keep props in refs to access them in the game loop without re-running the effect
   const playerStateRef = useRef(playerState);
   const isPausedRef = useRef(isPaused);
   const isHardModeRef = useRef(isHardMode);
-  const onGameOverRef = useRef(onGameOver);
-  const onAddScoreRef = useRef(onAddScore);
 
   useEffect(() => { playerStateRef.current = playerState; }, [playerState]);
   useEffect(() => { isPausedRef.current = isPaused; }, [isPaused]);
   useEffect(() => { isHardModeRef.current = isHardMode; }, [isHardMode]);
-  useEffect(() => { onGameOverRef.current = onGameOver; }, [onGameOver]);
-  useEffect(() => { onAddScoreRef.current = onAddScore; }, [onAddScore]);
 
-  // Mutable game state
   const gameState = useRef({
     playing: true,
     lastFrameTime: 0,
     playTimeMs: 0,
-    score: 0,
-    speed: 0,
+    candyRunCount: 0,
+    jumpRunCount: 0,
     totalDistance: 0,
     nextObstacleDist: 500,
     nextCandyDist: 300,
     speedMultiplier: 1.0,
     difficultyMultiplier: 1.0,
     currentStage: 0,
-    celebrationTimer: 0,
-    isSliding: false
+    isSlidingHeld: false, 
+    currentHearts: playerState.maxHearts,
+    invincibleTimer: 0,
+    shakeTimer: 0
   });
 
-  const jumpPressed = useRef(false); // Track if jump button is physically held
-  const slidePressed = useRef(false); // Track if slide button is currently held down
-
-  // Initialize character at X=150 to clear the slide button area
-  const ginger = useRef({ x: 150, y: 0, dy: 0, grounded: false, jumpCount: 0, rotation: 0 });
+  const ginger = useRef({ x: 150, y: 0, dy: 0, grounded: false, jumpCount: 0 });
   const objects = useRef<GameObject[]>([]);
-  const particles = useRef<Particle[]>([]);
   const clouds = useRef<Cloud[]>([]);
-  const hills = useRef<{x: number, h: number, c: string}[]>([]); 
+  const hills = useRef<{x: number, h: number, c: string, layer: number}[]>([]); 
 
-  // --- DRAWING HELPERS ---
+  const getFullPlayerName = () => {
+    if (!playerState.activeTitle) return playerState.name;
+    const ach = ACHIEVEMENTS.find(a => a.id === playerState.activeTitle);
+    return `[${ach?.icon || ''} ${ach?.name || ''}] ${playerState.name}`;
+  };
+
+  const calculateScore = useCallback(() => {
+    return (gameState.current.candyRunCount * playerStateRef.current.level) + 
+           (gameState.current.jumpRunCount * playerStateRef.current.jumpBonus);
+  }, []);
+
+  const jumpAction = useCallback(() => {
+    audioManager.resume();
+    if(!gameState.current.playing || isPausedRef.current) return;
+
+    if(ginger.current.grounded || gameState.current.isSlidingHeld) {
+        ginger.current.dy = -20; 
+        ginger.current.grounded = false;
+        ginger.current.jumpCount = 1;
+        gameState.current.jumpRunCount++;
+    } else if(ginger.current.jumpCount < 2) {
+        ginger.current.dy = -18; 
+        ginger.current.jumpCount++;
+        gameState.current.jumpRunCount++;
+    }
+    setHudTotalScore(calculateScore());
+  }, [calculateScore]);
+
+  const slideAction = useCallback((isHeld: boolean) => {
+    if(!gameState.current.playing || isPausedRef.current) return;
+    gameState.current.isSlidingHeld = isHeld;
+  }, []);
+
+  // 글래스모피즘 기반 3D 스타일 장애물 드로잉
   const drawObstacle = (ctx: CanvasRenderingContext2D, o: GameObject) => {
     ctx.save();
     ctx.translate(o.x, o.y);
-
     const w = o.w || 40;
     const h = o.h || 40;
-    const variation = o.variation || 1;
 
-    // Helper for 3D block
-    const draw3DBlock = (colorFace: string, colorSide: string, colorTop: string, bx: number, by: number, bw: number, bh: number) => {
-        // Side
-        ctx.fillStyle = colorSide;
-        ctx.beginPath(); ctx.moveTo(bx+bw, by); ctx.lineTo(bx+bw+10, by-10); ctx.lineTo(bx+bw+10, by+bh-10); ctx.lineTo(bx+bw, by+bh); ctx.fill();
-        // Top
-        ctx.fillStyle = colorTop;
-        ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx+10, by-10); ctx.lineTo(bx+bw+10, by-10); ctx.lineTo(bx+bw, by); ctx.fill();
-        // Front
-        ctx.fillStyle = colorFace;
-        ctx.fillRect(bx, by, bw, bh);
+    // 기본 유리 효과 설정
+    ctx.shadowBlur = 15;
+    ctx.shadowColor = "rgba(0,0,0,0.15)";
+    
+    const applyGlassEffect = (baseColor: string) => {
+        ctx.fillStyle = baseColor;
+        ctx.strokeStyle = "rgba(255,255,255,0.4)";
+        ctx.lineWidth = 2;
+    };
+
+    const drawShine = (sx: number, sy: number, sw: number, sh: number) => {
+        const grad = ctx.createLinearGradient(sx, sy, sx + sw, sy + sh);
+        grad.addColorStop(0, "rgba(255,255,255,0.5)");
+        grad.addColorStop(0.5, "rgba(255,255,255,0)");
+        grad.addColorStop(1, "rgba(255,255,255,0.1)");
+        ctx.fillStyle = grad;
+        ctx.fillRect(sx, sy, sw, sh);
     };
 
     switch(o.type) {
-        case 'cactus':
-            // Optimization: Avoid creating gradients every frame if possible, 
-            // but for simplicity we keep it. The major bottleneck was filter() in loop.
-            const cactusColor = ctx.createLinearGradient(0,0,w,0);
-            cactusColor.addColorStop(0, "#4caf50"); cactusColor.addColorStop(1, "#2e7d32");
-            ctx.fillStyle = cactusColor;
-            if (variation === 1) {
-                ctx.beginPath(); ctx.roundRect(0, 0, w, h, 10); ctx.fill();
-                ctx.fillStyle="rgba(0,0,0,0.2)"; ctx.beginPath(); ctx.roundRect(w-5, 0, 5, h, 0); ctx.fill();
-            } else {
-                ctx.beginPath(); ctx.roundRect(10, 0, w-20, h, 10); ctx.fill();
-                 if (variation === 2) { ctx.beginPath(); ctx.roundRect(0, 20, 10, 20, 5); ctx.fill(); }
-            }
-            ctx.fillStyle = "white";
-            for(let i=0; i<5; i++) ctx.fillRect(Math.random()*w, Math.random()*h, 2, 2);
-            break;
-        case 'rock':
-            const rockGrad = ctx.createRadialGradient(w/3, h/3, 5, w/2, h/2, w);
-            rockGrad.addColorStop(0, "#bdbdbd"); rockGrad.addColorStop(1, "#616161");
-            ctx.fillStyle = rockGrad;
-            ctx.beginPath(); ctx.moveTo(10, h); ctx.lineTo(0, h-10); ctx.lineTo(w/2, 0); ctx.lineTo(w, h-15); ctx.lineTo(w-10, h); ctx.fill();
-            ctx.fillStyle = "#424242"; ctx.beginPath(); ctx.moveTo(w, h-15); ctx.lineTo(w+5, h-20); ctx.lineTo(w+5, h); ctx.lineTo(w-10, h); ctx.fill();
-            break;
-        case 'barrier':
-            draw3DBlock("#ef5350", "#c62828", "#ffcdd2", 0, 10, w, 20); 
-            ctx.fillStyle = "#5d4037"; ctx.fillRect(5, 30, 8, h-30); ctx.fillRect(w-15, 30, 8, h-30);
-            ctx.fillStyle = "rgba(255,255,255,0.8)";
-            for(let i=0; i<w; i+=20) { ctx.beginPath(); ctx.moveTo(i, 30); ctx.lineTo(i+10, 30); ctx.lineTo(i+20, 10); ctx.lineTo(i+10, 10); ctx.fill(); }
-            break;
-        case 'bird':
-            ctx.scale(variation === 1 ? 1 : 1, 1); 
-            const wingY = Math.sin(gameState.current.playTimeMs / 60) * 12;
-            const birdGrad = ctx.createLinearGradient(0,0,0,h);
-            birdGrad.addColorStop(0, "#42a5f5"); birdGrad.addColorStop(1, "#1565c0");
-            ctx.fillStyle = birdGrad; ctx.beginPath(); ctx.ellipse(w/2, h/2, w/2, h/3, 0, 0, Math.PI*2); ctx.fill();
-            ctx.fillStyle = "#90caf9"; ctx.beginPath(); ctx.moveTo(w/3, h/2); ctx.quadraticCurveTo(w/2, h/2-wingY, w, h/2); ctx.lineTo(w/2, h/1.5); ctx.fill();
-            ctx.fillStyle = "white"; ctx.beginPath(); ctx.arc(w*0.75, h*0.3, 4, 0, Math.PI*2); ctx.fill();
-            ctx.fillStyle = "black"; ctx.beginPath(); ctx.arc(w*0.8, h*0.3, 1.5, 0, Math.PI*2); ctx.fill();
-            ctx.fillStyle = "#ffeb3b"; ctx.beginPath(); ctx.moveTo(w*0.85, h*0.4); ctx.lineTo(w+5, h*0.45); ctx.lineTo(w*0.85, h*0.5); ctx.fill();
-            break;
-        case 'ghost':
-            const ghostGrad = ctx.createLinearGradient(0,0,w,0);
-            ghostGrad.addColorStop(0, "#f5f5f5"); ghostGrad.addColorStop(1, "#e0e0e0");
-            ctx.fillStyle = ghostGrad;
-            ctx.beginPath(); ctx.arc(w/2, w/2, w/2, Math.PI, 0); ctx.lineTo(w, h); ctx.quadraticCurveTo(w*0.8, h-10, w*0.7, h); ctx.quadraticCurveTo(w*0.5, h-10, w*0.3, h); ctx.lineTo(0, w/2); ctx.fill();
-            ctx.fillStyle = "rgba(0,0,0,0.1)"; ctx.beginPath(); ctx.arc(w/2+5, w/2, w/2, Math.PI, 0); ctx.fill();
-            ctx.fillStyle = "#333"; ctx.beginPath(); ctx.arc(w*0.35, h*0.4, 3, 0, Math.PI*2); ctx.arc(w*0.65, h*0.4, 3, 0, Math.PI*2); ctx.fill();
-            break;
-        case 'bee':
-            const beeGrad = ctx.createRadialGradient(w/2, h/3, 5, w/2, h/2, w);
-            beeGrad.addColorStop(0, "#ffeb3b"); beeGrad.addColorStop(1, "#fbc02d");
-            ctx.fillStyle = beeGrad; ctx.beginPath(); ctx.ellipse(w/2, h/2, w/2, h/3, 0, 0, Math.PI*2); ctx.fill();
-            ctx.fillStyle = "#212121"; ctx.beginPath(); ctx.ellipse(w/2, h/2, w/2, h/3, 0, 0, Math.PI*2); ctx.save(); ctx.clip(); ctx.fillRect(w*0.4, 0, 8, h); ctx.fillRect(w*0.7, 0, 8, h); ctx.restore();
-            ctx.fillStyle = "rgba(255,255,255,0.8)"; const beeWing = Math.sin(gameState.current.playTimeMs / 20) * 5; ctx.beginPath(); ctx.ellipse(w/2, h*0.3, w/4, h/4 + beeWing, 0, 0, Math.PI*2); ctx.fill();
-            break;
-        case 'mushroom':
-            ctx.fillStyle = "#ffcc80"; ctx.fillRect(w/2 - 10, h/2, 20, h/2);
-            const mushGrad = ctx.createRadialGradient(w/2, 0, 5, w/2, h/2, w); mushGrad.addColorStop(0, "#ef5350"); mushGrad.addColorStop(1, "#c62828");
-            ctx.fillStyle = mushGrad; ctx.beginPath(); ctx.arc(w/2, h/2, w/2+5, Math.PI, 0); ctx.fill();
-            ctx.fillStyle = "white"; ctx.beginPath(); ctx.arc(w/2 - 15, h/3, 5, 0, Math.PI*2); ctx.arc(w/2 + 15, h/2.5, 4, 0, Math.PI*2); ctx.fill();
-            break;
-        default:
-             ctx.fillStyle = "#ff5722"; ctx.roundRect(0, 0, w, h, 5); ctx.fill();
-             break;
+      case 'bird': { // 글래시 핑크 도넛
+        ctx.beginPath();
+        ctx.ellipse(w/2, h/2, w/2, h/2.5, 0, 0, Math.PI*2);
+        const grad = ctx.createRadialGradient(w/2, h/2, 5, w/2, h/2, w/2);
+        grad.addColorStop(0, "rgba(255, 182, 193, 0.6)");
+        grad.addColorStop(1, "rgba(255, 105, 180, 0.8)");
+        ctx.fillStyle = grad; ctx.fill(); ctx.stroke();
+        // 광택
+        ctx.beginPath(); ctx.ellipse(w/3, h/3, w/6, h/10, Math.PI/4, 0, Math.PI*2);
+        ctx.fillStyle = "rgba(255,255,255,0.4)"; ctx.fill();
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.beginPath(); ctx.arc(w/2, h/2, w/6, 0, Math.PI*2); ctx.fill();
+        ctx.globalCompositeOperation = 'source-over';
+        break;
+      }
+      case 'bee': { // 크리스탈 마카롱
+        const macColor = "rgba(255, 235, 59, 0.7)";
+        ctx.fillStyle = macColor;
+        ctx.beginPath(); ctx.roundRect(0, h/2 - 15, w, 14, 10); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.roundRect(0, h/2 + 2, w, 14, 10); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = "rgba(255,255,255,0.9)";
+        ctx.fillRect(4, h/2 - 2, w-8, 5);
+        // 날개 (더 반투명하게)
+        ctx.fillStyle = "rgba(255,255,255,0.3)";
+        ctx.beginPath(); ctx.ellipse(5, h/2-12, 18, 8, -Math.PI/4, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(w-5, h/2-12, 18, 8, Math.PI/4, 0, Math.PI*2); ctx.fill();
+        break;
+      }
+      case 'ghost': { // 프로스트 마시멜로
+        const mashColor = "rgba(255, 255, 255, 0.4)";
+        ctx.fillStyle = mashColor;
+        ctx.beginPath(); ctx.roundRect(w/4, h/4, w/2, h/2, 12); ctx.fill();
+        ctx.strokeStyle = "rgba(255,255,255,0.8)"; ctx.stroke();
+        ctx.fillStyle = "#333";
+        ctx.beginPath(); ctx.arc(w/2 - 8, h/2, 2.5, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(w/2 + 8, h/2, 2.5, 0, Math.PI*2); ctx.fill();
+        break;
+      }
+      case 'cactus': { // 네온 캔디 케인
+        ctx.lineWidth = 12; ctx.lineCap = "round";
+        ctx.strokeStyle = "rgba(255,255,255,0.5)";
+        ctx.beginPath(); ctx.moveTo(w/2, h); ctx.lineTo(w/2, 30); ctx.quadraticCurveTo(w/2, 0, w, 10); ctx.stroke();
+        ctx.strokeStyle = "rgba(244, 67, 54, 0.8)"; ctx.setLineDash([12, 15]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        break;
+      }
+      case 'rock': { // 글로시 초코 쿠키
+        const cookieGrad = ctx.createRadialGradient(w/2, h/2, 0, w/2, h/2, w/2);
+        cookieGrad.addColorStop(0, "rgba(210, 180, 140, 0.6)");
+        cookieGrad.addColorStop(1, "rgba(139, 69, 19, 0.8)");
+        ctx.fillStyle = cookieGrad;
+        ctx.beginPath(); ctx.arc(w/2, h/2, w/2, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+        // 초코칩 (3D 느낌)
+        ctx.fillStyle = "rgba(62, 39, 35, 0.9)";
+        for(let i=0; i<8; i++) {
+            const cx = 15 + Math.random()*(w-30);
+            const cy = 15 + Math.random()*(h-30);
+            ctx.beginPath(); ctx.arc(cx, cy, 5, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = "rgba(255,255,255,0.2)";
+            ctx.beginPath(); ctx.arc(cx-1, cy-1, 2, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = "rgba(62, 39, 35, 0.9)";
+        }
+        break;
+      }
+      case 'barrier': { // 골드 와플 블록
+        const waffleColor = "rgba(255, 193, 7, 0.5)";
+        ctx.fillStyle = waffleColor;
+        ctx.beginPath(); ctx.roundRect(0, 0, w, h, 10); ctx.fill(); ctx.stroke();
+        ctx.strokeStyle = "rgba(255,255,255,0.3)"; ctx.lineWidth = 2;
+        for(let x=15; x<w; x+=25) ctx.strokeRect(x, 10, 8, h-20);
+        for(let y=15; y<h; y+=25) ctx.strokeRect(10, y, w-20, 8);
+        break;
+      }
+      case 'mushroom': { // 주얼 컵케이크
+        ctx.fillStyle = "rgba(121, 85, 72, 0.7)";
+        ctx.beginPath(); ctx.moveTo(w/5, h); ctx.lineTo(4*w/5, h); ctx.lineTo(w, h/2.5); ctx.lineTo(0, h/2.5); ctx.fill();
+        ctx.fillStyle = "rgba(244, 143, 177, 0.6)";
+        ctx.beginPath(); ctx.arc(w/2, h/2.5, w/2.2, Math.PI, 0); ctx.fill();
+        ctx.beginPath(); ctx.arc(w/2, h/4.5, w/3, Math.PI, 0); ctx.fill();
+        ctx.fillStyle = "rgba(211, 47, 47, 0.9)";
+        ctx.beginPath(); ctx.arc(w/2, h/7, 10, 0, Math.PI*2); ctx.fill();
+        // 하이라이트
+        ctx.fillStyle = "rgba(255,255,255,0.4)";
+        ctx.beginPath(); ctx.arc(w/2 - 3, h/7 - 3, 3, 0, Math.PI*2); ctx.fill();
+        break;
+      }
     }
     ctx.restore();
   };
 
-  const jumpAction = useCallback(() => {
-    // Ensure audio context is active (mobile requirement)
-    audioManager.resume();
-    
-    // Check pause state via ref to access latest value
-    if(!gameState.current.playing || isPausedRef.current) return;
-    
-    // Updated Jump Logic: 80% height, 1.1x speed
-    if(ginger.current.grounded) {
-        if (gameState.current.isSliding) {
-            gameState.current.isSliding = false;
-        }
-        // Lower jump force (-20) combined with higher gravity for faster, lower jump
-        ginger.current.dy = -20; 
-        ginger.current.grounded = false;
-        ginger.current.jumpCount = 1;
-    } else if(ginger.current.jumpCount < 2) {
-        ginger.current.dy = -18; 
-        ginger.current.jumpCount++;
-        for(let i=0; i<5; i++) {
-             particles.current.push({ x: ginger.current.x, y: ginger.current.y, type: 'impact', life: 20, dy: Math.random()*4 - 2, size: Math.random()*3 });
-        }
-    }
-  }, []);
-
-  const slideStart = useCallback(() => {
-      audioManager.resume();
-      if(!gameState.current.playing || isPausedRef.current) return;
-      slidePressed.current = true; // Track intent
-
-      if (ginger.current.grounded) {
-          gameState.current.isSliding = true;
-      } 
-  }, []);
-
-  const slideEnd = useCallback(() => {
-      slidePressed.current = false;
-      gameState.current.isSliding = false;
-  }, []);
-
-  // Use robust event handling for virtual buttons
-  // "key chewing" usually happens because of zoom delay or touch conflicts.
-  // We use preventDefault and stopPropagation to ensure clean execution.
-  // We added a specific logic (jumpPressed ref) to enforce "Press-Release" cycle.
-  const handleJumpStart = useCallback((e: React.SyntheticEvent | Event) => {
-      // Prevent default browser behavior (scrolling, zooming, mouse emulation)
-      if (e.cancelable && e.type !== 'keydown') e.preventDefault();
-      e.stopPropagation();
-      
-      if (jumpPressed.current) return; // Prevent double trigger if already held
-      
-      jumpPressed.current = true;
-      jumpAction();
-  }, [jumpAction]);
-
-  const handleJumpEnd = useCallback((e: React.SyntheticEvent | Event) => {
-      if (e.cancelable && e.type !== 'keyup') e.preventDefault();
-      e.stopPropagation();
-      jumpPressed.current = false;
-  }, []);
-
-  const handleSlideStartInput = useCallback((e: React.SyntheticEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      slideStart();
-  }, [slideStart]);
-
-  const handleSlideEndInput = useCallback((e: React.SyntheticEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      slideEnd();
-  }, [slideEnd]);
-
-
-  // --- SEPARATE BGM EFFECT ---
-  // This ensures BGM only starts on mount and stops on unmount,
-  // preventing it from restarting when 'onAddScore' or state changes.
-  useEffect(() => {
-      audioManager.playBgm(isHardMode ? 'hard' : 'normal');
-      return () => {
-          audioManager.stopBgm();
-      };
-  }, [isHardMode]);
-
-  // --- GAME LOOP EFFECT ---
   useEffect(() => {
     const canvas = canvasRef.current;
     if(!canvas) return;
     const ctx = canvas.getContext('2d');
     if(!ctx) return;
-
-    const resize = () => {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-    };
+    
+    const resize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; };
     resize();
     window.addEventListener('resize', resize);
-
+    
     if (clouds.current.length === 0) {
-        for(let i=0; i<8; i++) {
-            clouds.current.push({ x: Math.random()*canvas.width, y: Math.random()*(canvas.height/2), speed: 0.2 + Math.random()*0.5, size: 0.5 + Math.random()*0.8 });
-        }
+        for(let i=0; i<8; i++) clouds.current.push({ x: Math.random()*canvas.width, y: Math.random()*(canvas.height/2), speed: 0.1 + Math.random()*0.3, size: 0.8 + Math.random()*1.2 });
     }
     if (hills.current.length === 0) {
-        for(let i=0; i<canvas.width; i+= 100) {
-            hills.current.push({ x: i, h: 50 + Math.random()*100, c: Math.random() > 0.5 ? '#81c784' : '#66bb6a' });
+        const hillColors = ['#A5D6A7', '#81C784', '#66BB6A', '#4CAF50'];
+        for(let layer=0; layer<3; layer++) {
+            for(let i=0; i<canvas.width + 400; i+= 250) {
+                hills.current.push({ 
+                    x: i, 
+                    h: 40 + (layer * 40) + Math.random()*60, 
+                    c: hillColors[layer % hillColors.length],
+                    layer: layer
+                });
+            }
         }
     }
 
     gameState.current.lastFrameTime = performance.now();
-
     let animationId: number;
 
     const loop = (timestamp: number) => {
-        // Use ref to check pause state without re-running effect
         if (isPausedRef.current) { 
             gameState.current.lastFrameTime = timestamp; 
             animationId = requestAnimationFrame(loop); 
@@ -277,273 +246,258 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ playerState, config, onGameOver
         gameState.current.lastFrameTime = timestamp;
         const dt = Math.min(deltaTime, 50); 
         gameState.current.playTimeMs += dt;
+        
+        if (gameState.current.invincibleTimer > 0) gameState.current.invincibleTimer -= dt;
+        if (gameState.current.shakeTimer > 0) gameState.current.shakeTimer -= dt;
 
         const totalSeconds = Math.floor(gameState.current.playTimeMs / 1000);
         setHudTime(`${Math.floor(totalSeconds / 60).toString().padStart(2, '0')}:${(totalSeconds % 60).toString().padStart(2, '0')}`);
 
-        const stageDuration = 20000;
-        const newStage = Math.floor(gameState.current.playTimeMs / stageDuration);
+        const newStage = Math.floor(gameState.current.playTimeMs / 12000); 
         if (newStage > gameState.current.currentStage) {
             gameState.current.currentStage = newStage;
-            gameState.current.speedMultiplier += 0.15;
-            gameState.current.difficultyMultiplier += 0.1;
+            gameState.current.speedMultiplier += 0.12;
             setHudStage(newStage + 1);
             setIsSpeedAlert(true);
             setTimeout(() => setIsSpeedAlert(false), 2000);
-            gameState.current.celebrationTimer = 100;
+            audioManager.playUpgradeSfx();
         }
 
         const hardModeMultiplier = isHardModeRef.current ? 1.5 : 1.0;
-        const baseSpeed = 0.4 * dt; 
-        const currentSpeed = (baseSpeed + (playerStateRef.current.level * 0.01)) * gameState.current.speedMultiplier * hardModeMultiplier;
+        const currentSpeed = (0.4 * dt + (playerStateRef.current.level * 0.01)) * gameState.current.speedMultiplier * hardModeMultiplier;
         gameState.current.totalDistance += currentSpeed;
 
         const bgIdx = Math.min(gameState.current.currentStage, BG_COLORS.length - 1);
         canvas.style.background = BG_COLORS[bgIdx];
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // Clouds & Hills
-        ctx.save(); ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
+        // 화면 흔들림 효과 적용
+        ctx.save();
+        if (gameState.current.shakeTimer > 0) {
+            const shakeAmount = 8;
+            ctx.translate(Math.random() * shakeAmount - shakeAmount/2, Math.random() * shakeAmount - shakeAmount/2);
+        }
+
+        const groundY = canvas.height - 160;
+
+        // 배경 렌더링
+        ctx.save();
+        ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
         clouds.current.forEach(c => {
             c.x -= c.speed * (dt / 16);
-            if(c.x < -100) { c.x = canvas.width + 100; c.y = Math.random() * (canvas.height/2); }
-            ctx.beginPath(); ctx.arc(c.x, c.y, 30*c.size, 0, Math.PI*2); ctx.arc(c.x+25*c.size, c.y-10*c.size, 35*c.size, 0, Math.PI*2); ctx.fill();
+            if(c.x < -150) { c.x = canvas.width + 100; c.y = Math.random() * (canvas.height/2); }
+            ctx.beginPath(); ctx.arc(c.x, c.y, 30 * c.size, 0, Math.PI * 2); ctx.fill();
         });
         ctx.restore();
 
-        // ** Shift game world up by 60px (was 100 base) **
-        const groundY = canvas.height - 160; 
-        
-        ctx.save(); 
-        hills.current.forEach((hill, i) => {
-            hill.x -= currentSpeed * 0.3;
-            if(hill.x < -200) { hill.x = canvas.width; hill.h = 50 + Math.random()*100; }
-            ctx.fillStyle = hill.c; ctx.beginPath(); ctx.moveTo(hill.x, groundY); ctx.quadraticCurveTo(hill.x + 100, groundY - hill.h, hill.x + 200, groundY); ctx.fill();
+        hills.current.forEach(hill => {
+            const layerSpeed = (hill.layer + 1) * 0.15;
+            hill.x -= currentSpeed * layerSpeed;
+            if(hill.x < -400) hill.x = canvas.width;
+            ctx.fillStyle = hill.c; ctx.beginPath(); ctx.moveTo(hill.x, groundY); ctx.quadraticCurveTo(hill.x + 150, groundY - hill.h, hill.x + 400, groundY); ctx.fill();
         });
-        ctx.fillStyle = "#81c784"; ctx.fillRect(0, groundY-10, canvas.width, 10);
-        ctx.restore();
 
-        // Physics
-        // Higher gravity (0.08) for snappier, faster jumps (1.1x speed feel)
-        const gravity = 0.08 * dt; 
-        ginger.current.dy += gravity; 
-        ginger.current.y += ginger.current.dy * (dt / 16); 
-        
-        const charGroundY = groundY - 25;
-        let onGround = false;
-        
-        // OPTIMIZED COLLISION LOOP: Removed filter() to prevent garbage collection
-        let hole = null;
-        for (let i = 0; i < objects.current.length; i++) {
-            const o = objects.current[i];
-            if (o.type === 'hole' && ginger.current.x > o.x && ginger.current.x < o.x + (o.w || 200)) {
-                hole = o;
-                break; 
+        // 물리 연산
+        ginger.current.dy += 0.08 * dt;
+        ginger.current.y += ginger.current.dy * (dt / 16);
+
+        let inHole = false;
+        objects.current.forEach(o => {
+            if (o.type === 'hole') {
+                if (ginger.current.x > o.x && ginger.current.x < o.x + (o.w || 100)) inHole = true;
             }
-        }
-        
-        let fell = false;
-        if (ginger.current.y > charGroundY) {
-            if (hole) { onGround = false; } 
-            else { 
-                ginger.current.y = charGroundY; 
-                ginger.current.dy = 0; 
-                onGround = true; 
-                ginger.current.jumpCount = 0; 
-                
-                // Buffered Slide Logic: If holding down when landing, start sliding immediately
-                if (slidePressed.current) {
-                    gameState.current.isSliding = true;
+        });
+
+        if (ginger.current.y > groundY - 25) {
+            if (inHole) {
+                if (ginger.current.y > canvas.height) {
+                    gameState.current.playing = false;
+                    onGameOver(calculateScore(), gameState.current.candyRunCount, Math.floor(gameState.current.playTimeMs/1000), true);
+                    return;
                 }
+            } else {
+                ginger.current.y = groundY - 25; 
+                ginger.current.dy = 0; 
+                ginger.current.grounded = true; 
+                ginger.current.jumpCount = 0;
             }
+        } else {
+            ginger.current.grounded = false;
         }
-        ginger.current.grounded = onGround;
-        if(ginger.current.y > canvas.height + 50) fell = true;
 
-        // Ground
-        const grassPatternWidth = 40;
-        const offset = -(gameState.current.totalDistance % grassPatternWidth);
+        const isSlidingNow = ginger.current.grounded && gameState.current.isSlidingHeld;
+
+        // 지면 렌더링
         ctx.fillStyle = "#5d4037"; ctx.fillRect(0, groundY, canvas.width, canvas.height - groundY);
         ctx.fillStyle = "#4caf50"; ctx.fillRect(0, groundY, canvas.width, 20);
-        ctx.fillStyle = "#388e3c";
-        for(let i=offset; i<canvas.width; i+=grassPatternWidth) { ctx.beginPath(); ctx.moveTo(i, groundY); ctx.lineTo(i+20, groundY+20); ctx.lineTo(i, groundY+20); ctx.fill(); }
+        objects.current.forEach(o => { if (o.type === 'hole') ctx.clearRect(o.x, groundY, o.w || 100, canvas.height - groundY); });
 
-        // Render Holes (Optimized: No new array creation)
-        for (let i = 0; i < objects.current.length; i++) {
-             const o = objects.current[i];
-             if (o.type === 'hole') {
-                 ctx.save(); ctx.globalCompositeOperation = 'destination-out'; ctx.fillStyle = "black"; ctx.fillRect(o.x + 10, groundY, (o.w || 200) - 20, canvas.height); ctx.restore();
-                 ctx.fillStyle = "#3e2723"; ctx.fillRect(o.x, groundY + 20, 10, 100); ctx.fillRect(o.x + (o.w||200) - 10, groundY + 20, 10, 100);
-             }
-        }
-
-        // Spawning
+        // 오브젝트 스폰
         if(gameState.current.totalDistance >= gameState.current.nextObstacleDist) {
-            const possibleTypes: GameObject['type'][] = ['cactus', 'rock', 'barrier', 'mushroom', 'hole', 'bird', 'ghost', 'bee'];
-            const objType = possibleTypes[Math.floor(Math.random() * possibleTypes.length)];
-            let yPos = groundY; let width = 50; let height = 50; let variation = 1; let initialY = 0;
-
-            if (['bird', 'ghost', 'bee'].includes(objType)) {
-                const heightTier = Math.random();
-                let tierOffset = 100; if (heightTier > 0.66) tierOffset = 400; else if (heightTier > 0.33) tierOffset = 250; 
-                yPos = groundY - tierOffset; height = 90; width = 90; initialY = yPos;
-            } else {
-                if (objType === 'hole') { variation = Math.ceil(Math.random() * 3); width = 150 + variation * 50; } 
-                else {
-                    if (objType === 'rock' || objType === 'barrier') { height = 68; width = 68; yPos = groundY - height + 10; } 
-                    else if (objType === 'cactus' || objType === 'mushroom') { height = 120; width = 100; yPos = groundY - height + 10; }
-                }
+            const rand = Math.random();
+            if (rand < 0.15) { 
+                objects.current.push({ type: 'hole', x: canvas.width, y: groundY, w: 100 + Math.random() * 80 });
+            } else if (rand < 0.45) { 
+                const types: GameObject['type'][] = ['bird', 'bee', 'ghost'];
+                const type = types[Math.floor(Math.random()*types.length)];
+                const airY = groundY - (60 + Math.random() * 140);
+                objects.current.push({ type, x: canvas.width, y: airY, w: 75, h: 75 });
+            } else { 
+                const types: GameObject['type'][] = ['cactus', 'rock', 'barrier', 'mushroom'];
+                const type = types[Math.floor(Math.random()*types.length)];
+                objects.current.push({ type, x: canvas.width, y: groundY - 95, w: 95, h: 95 });
             }
-            objects.current.push({ type: objType, x: canvas.width, y: yPos, w: width, h: height, variation, initialY });
-            const hardModeFreq = isHardModeRef.current ? 1.5 : 1.0;
-            gameState.current.nextObstacleDist = gameState.current.totalDistance + ((650 + Math.random() * 450) / gameState.current.difficultyMultiplier) / hardModeFreq;
+            gameState.current.nextObstacleDist = gameState.current.totalDistance + (500 + Math.random()*600);
         }
 
         if(gameState.current.totalDistance >= gameState.current.nextCandyDist) {
-             const cy = groundY - (Math.random() * 200 + 60);
-             if(!objects.current.some(o => Math.abs(o.x - canvas.width) < 150)) {
-                objects.current.push({ type: 'candy', x: canvas.width, y: cy, r: 25, candyIdx: playerStateRef.current.currentCandySkin });
-                gameState.current.nextCandyDist = gameState.current.totalDistance + (400 + Math.random() * 200);
-             } else { gameState.current.nextCandyDist = gameState.current.totalDistance + 100; }
+            objects.current.push({ type: 'candy', x: canvas.width, y: groundY - (60 + Math.random()*160), r: 25, candyIdx: playerStateRef.current.currentCandySkin });
+            gameState.current.nextCandyDist = gameState.current.totalDistance + (250 + Math.random()*300);
         }
 
-        let collision = false; if (fell) collision = true;
-
-        for(let i = 0; i < objects.current.length; i++) {
-            let o = objects.current[i];
+        // 충돌 및 오브젝트 렌더링
+        let hitSomething = false;
+        for(let i=0; i<objects.current.length; i++) {
+            const o = objects.current[i];
             o.x -= currentSpeed;
-            if(o.type === 'bird') o.x -= Math.sin(gameState.current.playTimeMs * 0.005) * 1.5;
-            else if(o.type === 'ghost') o.y = (o.initialY || 0) + Math.sin(gameState.current.playTimeMs * 0.003) * 30;
-            else if(o.type === 'bee') o.y = (o.initialY || 0) + Math.sin(gameState.current.playTimeMs * 0.01) * 5;
 
-            if(o.type === 'candy') {
+            if (o.type === 'candy') {
                 drawCandySimple(ctx, o.x, o.y, o.r || 20, o.candyIdx || 0);
-                if(Math.hypot(ginger.current.x - o.x, (ginger.current.y - 30) - o.y) < 60) {
-                    const scorePts = 1 * playerStateRef.current.level; 
-                    // Update Game Score (Leaderboard) based on Level
-                    gameState.current.score += scorePts;
-                    setHudScore(gameState.current.score);
-
-                    // Update Currency (Wallet) -> ALWAYS +1 per candy regardless of level
-                    onAddScoreRef.current(1);
-                    
-                    particles.current.push({ x: o.x, y: o.y, type: 'score', text: `+${scorePts}`, life: 50, dy: -1 });
-                    
-                    // SFX: Candy
-                    audioManager.playCandySfx();
-
+                if (Math.hypot(ginger.current.x - o.x, (ginger.current.y - 20) - o.y) < 50) {
+                    gameState.current.candyRunCount++;
+                    setHudCandyCount(gameState.current.candyRunCount);
+                    setHudTotalScore(calculateScore());
+                    onAddScore(1); audioManager.playCandySfx();
                     objects.current.splice(i, 1); i--; continue;
                 }
             } else if (o.type !== 'hole') {
                 drawObstacle(ctx, o);
-                const isSliding = gameState.current.isSliding;
-                const pX = ginger.current.x; const pY = ginger.current.y - (isSliding ? 15 : 25); const pW = 14; const pH = isSliding ? 20 : 35; 
-                const oCenterX = o.x + (o.w||40)/2; const oCenterY = o.y + (o.h||40)/2;
-                const hitX = Math.abs(pX - oCenterX) < ((o.w||40)/2 + pW - 10);
-                const hitY = Math.abs(pY - oCenterY) < ((o.h||40)/2 + pH - 10);
-                if(hitX && hitY) collision = true;
+                
+                const pW = 30; 
+                const pH = isSlidingNow ? 25 : 60;
+                const pY = isSlidingNow ? ginger.current.y + 15 : ginger.current.y - 20;
+                
+                const objCenterX = o.x + (o.w || 40) / 2;
+                const objCenterY = o.y + (o.h || 40) / 2;
+                
+                if (gameState.current.invincibleTimer <= 0 && 
+                    Math.abs(ginger.current.x - objCenterX) < (pW + (o.w || 40) / 2 - 20) && 
+                    Math.abs(pY - objCenterY) < (pH / 2 + (o.h || 40) / 2 - 20)) {
+                    hitSomething = true;
+                }
             }
             if(o.x < -300) { objects.current.splice(i, 1); i--; }
         }
 
-        let expression = 'normal'; if(gameState.current.celebrationTimer > 0) { expression = 'happy'; gameState.current.celebrationTimer--; } if(collision) expression = 'cry';
-        drawCharacter(ctx, ginger.current.x, ginger.current.y, playerStateRef.current.currentSkin, playerStateRef.current.equipped, gameState.current.playTimeMs, gameState.current.isSliding, expression, ginger.current.dy, ginger.current.grounded);
-
-        for(let i=0; i<particles.current.length; i++) {
-            let p = particles.current[i]; p.life--; p.y += (p.dy || 0);
-            if(p.type === 'score' && p.text) { ctx.shadowColor = "black"; ctx.shadowBlur = 4; ctx.font = "bold 32px Pretendard"; ctx.fillStyle = `rgba(255, 215, 0, ${p.life/50})`; ctx.fillText(p.text, p.x, p.y); ctx.shadowBlur = 0; } 
-            else if (p.type === 'impact') { ctx.fillStyle = `rgba(255, 255, 255, ${p.life/20})`; ctx.beginPath(); ctx.arc(p.x, p.y, p.size || 2, 0, Math.PI*2); ctx.fill(); }
-            if(p.life <= 0) { particles.current.splice(i, 1); i--; }
+        if (hitSomething) {
+            gameState.current.currentHearts--;
+            setHudHearts(gameState.current.currentHearts);
+            gameState.current.shakeTimer = 500; // 충돌 시 화면 흔들림
+            if(gameState.current.currentHearts > 0) {
+                gameState.current.invincibleTimer = 1500;
+                audioManager.playGameOverSfx(); 
+            } else {
+                gameState.current.playing = false;
+                audioManager.stopBgm();
+                audioManager.playGameOverSfx();
+                onGameOver(calculateScore(), gameState.current.candyRunCount, Math.floor(gameState.current.playTimeMs/1000), false);
+                return;
+            }
         }
 
-        if (collision) { 
-            gameState.current.playing = false; 
-            // SFX: Stop BGM, Play Fail
-            audioManager.stopBgm();
-            audioManager.playGameOverSfx();
-            onGameOverRef.current(gameState.current.score, Math.floor(gameState.current.playTimeMs/1000), fell); 
-        } 
-        else { animationId = requestAnimationFrame(loop); }
+        drawCharacter(ctx, ginger.current.x, ginger.current.y, playerStateRef.current.currentSkin, playerStateRef.current.equipped, gameState.current.playTimeMs, isSlidingNow, (gameState.current.invincibleTimer > 0 ? 'cry' : 'normal'), ginger.current.dy, ginger.current.grounded, gameState.current.invincibleTimer > 0);
+
+        ctx.restore(); // 흔들림 효과 restore
+        animationId = requestAnimationFrame(loop);
     };
 
     animationId = requestAnimationFrame(loop);
 
-    const handleKeyDown = (e: KeyboardEvent) => { 
-        if(e.code === 'Space' || e.code === 'ArrowUp') { 
-            e.preventDefault(); 
-            // Only jump if not already pressing (enforce release)
-            if (!jumpPressed.current) {
-                jumpPressed.current = true;
-                jumpAction(); 
-            }
-        } 
-        if(e.code === 'ArrowDown') { e.preventDefault(); slideStart(); } 
+    const handleKeyDown = (e: KeyboardEvent) => {
+        if(e.code === 'Space' || e.code === 'ArrowUp') { e.preventDefault(); jumpAction(); }
+        if(e.code === 'ArrowDown') { e.preventDefault(); slideAction(true); }
     };
-    
-    const handleKeyUp = (e: KeyboardEvent) => { 
-        if(e.code === 'Space' || e.code === 'ArrowUp') {
-            jumpPressed.current = false;
-        }
-        if(e.code === 'ArrowDown') { slideEnd(); } 
-    }
-    
-    window.addEventListener('keydown', handleKeyDown); window.addEventListener('keyup', handleKeyUp);
-
-    return () => { 
-        window.removeEventListener('resize', resize); 
-        window.removeEventListener('keydown', handleKeyDown); 
-        window.removeEventListener('keyup', handleKeyUp); 
-        cancelAnimationFrame(animationId); 
+    const handleKeyUp = (e: KeyboardEvent) => {
+        if(e.code === 'ArrowDown') { e.preventDefault(); slideAction(false); }
     };
-  }, []); // Dependencies empty to prevent canvas reset on re-renders
 
-  const getActiveTitleName = () => {
-      if (!playerState.activeTitle) return "";
-      const t = ACHIEVEMENTS.find(a => a.id === playerState.activeTitle);
-      return t ? `[${t.name}] ` : "";
-  };
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+        window.removeEventListener('resize', resize);
+        window.removeEventListener('keydown', handleKeyDown);
+        window.removeEventListener('keyup', handleKeyUp);
+        cancelAnimationFrame(animationId);
+    };
+  }, [jumpAction, slideAction, onGameOver, onAddScore, calculateScore]); 
 
   return (
-    <div ref={containerRef} className="relative w-full h-full">
-        <canvas ref={canvasRef} className="block w-full h-full" />
-        {/* HUD Elements */}
-        <div className="absolute top-0 left-0 w-full p-4 flex flex-row justify-between items-center pointer-events-none z-10 gap-2">
-            <div className="flex flex-row gap-2 items-center overflow-x-auto no-scrollbar">
-                <div className="bg-black/40 backdrop-blur-md px-4 py-2 rounded-2xl flex items-center gap-3 border-2 border-white/20 text-white font-bold text-lg shadow-lg shrink-0">
+    <div className="relative w-full h-full overflow-hidden">
+        <canvas ref={canvasRef} className="block w-full h-full transition-colors duration-2000" />
+        
+        {/* HUD */}
+        <div className="absolute top-0 left-0 w-full p-6 flex justify-between items-start pointer-events-none z-10">
+            <div className="flex gap-4">
+                <div className="bg-black/40 backdrop-blur-md px-4 py-2 rounded-2xl flex items-center gap-3 border-2 border-white/20 text-white font-bold shadow-lg">
                     <i className="fa-solid fa-user text-yellow-300"></i> 
-                    <span className="max-w-[150px] truncate">{getActiveTitleName()}{playerState.name}</span>
-                </div>
-                <div className="bg-black/40 backdrop-blur-md px-3 py-2 rounded-2xl flex items-center justify-center gap-2 border-2 border-white/20 text-white font-bold text-lg shadow-lg shrink-0">
-                    <i className="fa-solid fa-cookie text-amber-500 text-xl"></i> <span>{playerState.wallet}</span>
+                    <span className="truncate max-w-[150px]">{getFullPlayerName()}</span>
                 </div>
             </div>
-            <div className="flex gap-2 shrink-0">
-                <div className="bg-black/40 backdrop-blur-md h-12 px-3 rounded-2xl flex items-center justify-center gap-2 border-2 border-white/20 text-white font-bold text-lg shadow-lg"><i className="fa-solid fa-flag text-green-300"></i> <span>{hudStage}</span></div>
-                <div className="bg-black/40 backdrop-blur-md h-12 px-3 rounded-2xl flex items-center justify-center gap-2 border-2 border-white/20 text-white font-bold text-lg shadow-lg"><i className="fa-solid fa-clock text-blue-300"></i> <span>{hudTime}</span></div>
-                <div className="bg-black/40 backdrop-blur-md h-12 px-3 rounded-2xl flex items-center justify-center gap-2 border-2 border-white/20 text-white font-bold text-xl shadow-lg"><span className="text-2xl">🍬</span> <span>{hudScore}</span></div>
+
+            <div className="bg-black/40 backdrop-blur-md px-5 py-2 rounded-2xl flex items-center gap-6 border-2 border-white/20 text-white font-bold shadow-lg">
+                <div className="flex gap-1.5 items-center">
+                    {Array.from({length: playerState.maxHearts}).map((_,i) => (
+                        <i key={i} className={`fa-solid fa-heart transition-colors duration-300 ${i < hudHearts ? 'text-red-500 drop-shadow-sm' : 'text-gray-600 opacity-40'}`}></i>
+                    ))}
+                </div>
+                <div className="h-4 w-px bg-white/20"></div>
+                <div className="flex items-center gap-2">
+                    <span className="text-xl">🍬</span> 
+                    <span className="text-purple-300 font-black">{hudCandyCount}</span>
+                </div>
+            </div>
+
+            <div className="flex items-center gap-3 pointer-events-none">
+                <div className="bg-black/40 backdrop-blur-md px-3 py-2 rounded-xl border-2 border-white/20 text-white font-bold text-sm shadow-md">
+                    <i className="fa-solid fa-flag mr-1.5 text-blue-400"></i> {hudStage}
+                </div>
+                <div className="bg-black/40 backdrop-blur-md px-3 py-2 rounded-xl border-2 border-white/20 text-white font-bold text-sm shadow-md">
+                    <i className="fa-solid fa-clock mr-1.5 text-slate-400"></i> {hudTime}
+                </div>
+                <div className="bg-black/60 backdrop-blur-md px-5 py-2 rounded-2xl border-2 border-yellow-400/30 text-yellow-400 font-black text-2xl shadow-xl flex items-center gap-3">
+                    <i className="fa-solid fa-trophy text-yellow-400"></i> 
+                    <span className="tabular-nums">{hudTotalScore}</span>
+                </div>
             </div>
         </div>
-        <div className={`absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 text-5xl md:text-7xl font-black text-yellow-300 italic transition-all duration-300 pointer-events-none z-50 ${isSpeedAlert ? 'opacity-100 scale-125' : 'opacity-0 scale-75'}`} style={{textShadow: '0 0 20px #ff6f00, 4px 4px 0 #bf360c'}}>⚡ 스피드 업!</div>
-        {/* Controls */}
-        <div className="absolute bottom-[174px] right-6 z-20">
-            {/* Added touch-none class and simplified handlers to prevent zoom/delay/double-tap issues */}
-            <button className="w-24 h-24 md:w-32 md:h-32 bg-white/20 border-4 border-white/60 rounded-full flex items-center justify-center text-white text-3xl backdrop-blur-md shadow-2xl active:scale-95 active:bg-white/40 transition-transform touch-none" 
-                onTouchStart={handleJumpStart} 
-                onTouchEnd={handleJumpEnd}
-                onMouseDown={handleJumpStart} 
-                onMouseUp={handleJumpEnd}
-                onMouseLeave={handleJumpEnd}>
-                <i className="fa-solid fa-arrow-up text-4xl md:text-5xl drop-shadow-md"></i>
+
+        {isSpeedAlert && (
+            <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 text-5xl md:text-7xl font-black text-yellow-300 italic animate-bounce pointer-events-none z-50 transition-all duration-300" style={{textShadow: '0 0 20px rgba(255,111,0,0.6), 4px 4px 0 rgba(191,54,12,1)'}}>
+                <i className="fa-solid fa-bolt mr-4"></i>SPEED UP!!
+            </div>
+        )}
+
+        {/* 조작 버튼 */}
+        <div className="absolute bottom-10 left-10 pointer-events-auto">
+            <button 
+                onTouchStart={() => slideAction(true)} 
+                onMouseDown={() => slideAction(true)}
+                onTouchEnd={() => slideAction(false)}
+                onMouseUp={() => slideAction(false)}
+                onMouseLeave={() => slideAction(false)}
+                className={`w-28 h-28 border-4 rounded-full text-white text-4xl backdrop-blur-md active:scale-90 transition-all shadow-2xl flex items-center justify-center ${gameState.current.isSlidingHeld ? 'bg-orange-500 border-orange-200 shadow-[0_0_20px_rgba(255,165,0,0.4)]' : 'bg-orange-500/40 border-orange-400'}`}
+            >
+                <i className="fa-solid fa-arrow-down"></i>
             </button>
         </div>
-        <div className="absolute bottom-[174px] left-6 z-20">
-            <button className="w-20 h-20 md:w-24 md:h-24 bg-white/20 border-4 border-white/60 rounded-full flex items-center justify-center text-white text-2xl backdrop-blur-md shadow-2xl active:scale-95 active:bg-white/40 transition-transform touch-none" 
-                onTouchStart={handleSlideStartInput} 
-                onTouchEnd={handleSlideEndInput} 
-                onMouseDown={handleSlideStartInput} 
-                onMouseUp={handleSlideEndInput} 
-                onMouseLeave={handleSlideEndInput}>
-                <i className="fa-solid fa-arrow-down text-3xl md:text-4xl drop-shadow-md"></i>
+
+        <div className="absolute bottom-10 right-10 pointer-events-auto">
+            <button 
+                onTouchStart={jumpAction} 
+                onMouseDown={jumpAction} 
+                className="w-28 h-28 bg-blue-500/40 border-4 border-blue-400 rounded-full text-white text-4xl backdrop-blur-md active:scale-90 transition-transform shadow-2xl flex items-center justify-center"
+            >
+                <i className="fa-solid fa-arrow-up"></i>
             </button>
         </div>
     </div>

@@ -1,5 +1,4 @@
 
-
 export enum AppView {
   INTRO = 'INTRO',
   TEACHER = 'TEACHER',
@@ -66,25 +65,26 @@ export interface PlayerState {
   wallet: number;
   totalCandies: number; 
   level: number;
+  maxHearts: number;
+  jumpBonus: number; 
   
   unlockedSkins: string[];
   currentSkin: string; 
-  currentCandySkin: number; // Index (0-19)
+  currentCandySkin: number; 
   
   inventory: PlayerInventory;
   equipped: PlayerEquipped;
 
-  // Title System
   activeTitle: string | null;
   unlockedTitles: string[];
-  stats: PlayerStats; // Cumulative stats for achievements
+  stats: PlayerStats; 
 
   records: GameRecord[];
-  logs: TransactionLog[]; // Transaction History
+  logs: TransactionLog[]; 
   dailyPlayCount: number;
   dailyShopCount: number;
   lastGamingDate: string;
-  lastGlobalReset?: number; // For teacher forced reset (Daily/Hard)
+  lastGlobalReset?: number; 
 }
 
 export interface GameConfig {
@@ -93,12 +93,14 @@ export interface GameConfig {
   candyColors: string[];
   priceUpgrade: number;
   priceGacha: number;
+  priceHeartUpgrade: number;
+  priceJumpUpgrade: number;
   dailyLimit: number;
   shopLimit: number;
   hardModeEntryCost: number; 
   exchangeRate: number; 
-  globalResetTimestamp: number; // Timestamp for Daily Count Reset
-  hardResetTimestamp?: number; // New: Timestamp for Full Data Reset (except Cookie)
+  globalResetTimestamp: number;
+  hardResetTimestamp?: number;
 }
 
 export interface GameObject {
@@ -107,9 +109,9 @@ export interface GameObject {
   y: number;
   w?: number;
   h?: number;
-  r?: number; // radius for candy
-  color?: string; // kept for compatibility, usage depends on context
-  candyIdx?: number; // New: for rendering specific candy type
+  r?: number; 
+  color?: string; 
+  candyIdx?: number; 
   variation?: number; 
   initialY?: number; 
   initialX?: number; 

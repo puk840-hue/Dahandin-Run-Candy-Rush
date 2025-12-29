@@ -21,23 +21,23 @@ export const ITEM_NAMES: Record<string, string> = {
     headphone: "헤드셋", flower: "꽃 핀", viking: "바이킹 투구",
     sword: "용사 칼", wand: "요정 지팡이", lollipop: "왕사탕", hammer: "뿅망치", bow: "장난감 활", shield: "나무 방패",
     mic: "황금 마이크", carrot: "신선한 당근", laser: "광선검",
-    overalls: "멜빵 바지", suit: "정장", dress: "드레스", hoodie: "후드티", tuxedo: "턱시도", raincoat: "우비",
+    overalls: "멜빵 바지", suit: "정장", dress: "드레스", hoodie: "hoodie", tuxedo: "턱시도", raincoat: "우비",
     armor: "기사 갑옷", jersey: "축구 유니폼", hanbok: "색동 한복",
     boots: "장화", sneakers: "운동화", slippers: "슬리퍼", heels: "구두", sandals: "샌들", skates: "스케이트",
     flippers: "오리발", socks: "줄무늬 양말", rocket: "로켓 부츠"
 };
 
 export const BG_COLORS = [
-    "linear-gradient(to bottom, #E3F2FD 0%, #BBDEFB 100%)", 
-    "linear-gradient(to bottom, #BBDEFB 0%, #90CAF9 100%)", 
-    "linear-gradient(to bottom, #90CAF9 0%, #64B5F6 100%)", 
-    "linear-gradient(to bottom, #64B5F6 0%, #F8BBD0 100%)", 
-    "linear-gradient(to bottom, #F8BBD0 0%, #F48FB1 100%)", 
-    "linear-gradient(to bottom, #F48FB1 0%, #FFCC80 100%)", 
-    "linear-gradient(to bottom, #FFCC80 0%, #FFB74D 100%)", 
-    "linear-gradient(to bottom, #FFB74D 0%, #E1BEE7 100%)", 
-    "linear-gradient(to bottom, #E1BEE7 0%, #CE93D8 100%)", 
-    "linear-gradient(to bottom, #CE93D8 0%, #BA68C8 100%)" 
+    "linear-gradient(to bottom, #87CEEB 0%, #E0F7FA 100%)", // 1: 맑은 낮
+    "linear-gradient(to bottom, #74ebd5 0%, #ACB6E5 100%)", // 2: 에메랄드 낮
+    "linear-gradient(to bottom, #89f7fe 0%, #66a6ff 100%)", // 3: 시원한 하늘
+    "linear-gradient(to bottom, #fbc2eb 0%, #a6c1ee 100%)", // 4: 몽환적인 핑크
+    "linear-gradient(to bottom, #fdcbf1 0%, #fdcbf1 1%, #e6dee9 100%)", // 5: 밝은 노을 기미
+    "linear-gradient(to bottom, #f6d365 0%, #fda085 100%)", // 6: 따뜻한 주황 노을
+    "linear-gradient(to bottom, #ff9a9e 0%, #fecfef 99%, #fecfef 100%)", // 7: 붉은 노을
+    "linear-gradient(to bottom, #a18cd1 0%, #fbc2eb 100%)", // 8: 보랏빛 황혼
+    "linear-gradient(to bottom, #30cfd0 0%, #330867 100%)", // 9: 깊은 밤의 시작
+    "linear-gradient(to bottom, #09203f 0%, #537895 100%)"  // 10: 심야
 ];
 
 export const INITIAL_PLAYER_STATE: PlayerState = {
@@ -47,9 +47,11 @@ export const INITIAL_PLAYER_STATE: PlayerState = {
     wallet: 0, 
     totalCandies: 0, 
     level: 1,
+    maxHearts: 1,
+    jumpBonus: 1, 
     unlockedSkins: ["#ffffff", "#8d6e63"], 
     currentSkin: "#8d6e63", 
-    currentCandySkin: 0, // Index 0-19
+    currentCandySkin: 0, 
     
     inventory: {
         hats: [],
@@ -64,7 +66,6 @@ export const INITIAL_PLAYER_STATE: PlayerState = {
         shoes: ""
     },
 
-    // Title System
     activeTitle: null,
     unlockedTitles: [],
     stats: {
@@ -78,7 +79,7 @@ export const INITIAL_PLAYER_STATE: PlayerState = {
     },
 
     records: [],
-    logs: [], // Transaction History
+    logs: [], 
     dailyPlayCount: 0, 
     dailyShopCount: 0, 
     lastGamingDate: "",
@@ -91,10 +92,12 @@ export const INITIAL_CONFIG = {
     candyColors: [...CANDY_COLORS],
     priceUpgrade: 5,  
     priceGacha: 10,   
+    priceHeartUpgrade: 50,
+    priceJumpUpgrade: 10,
     dailyLimit: 5,    
     shopLimit: 1,
-    hardModeEntryCost: 100, // Cost per play
-    exchangeRate: 10,   // 10 Candies = 1 Cookie
+    hardModeEntryCost: 30, 
+    exchangeRate: 10,   
     globalResetTimestamp: 0,
     hardResetTimestamp: 0
 };

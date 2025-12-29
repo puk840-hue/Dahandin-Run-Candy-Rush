@@ -1,6 +1,22 @@
+
 import CryptoJS from 'crypto-js';
 import { GameConfig, PlayerState } from './types';
 import { SECRET_PASSPHRASE, STORAGE_KEY, CANDY_TYPES, CANDY_COLORS } from './constants';
+
+// --- Utility Functions ---
+export const darkenColor = (hex: string, percent: number): string => {
+    // Basic hex darkening
+    let r = parseInt(hex.slice(1, 3), 16);
+    let g = parseInt(hex.slice(3, 5), 16);
+    let b = parseInt(hex.slice(5, 7), 16);
+
+    r = Math.floor(r * (1 - percent / 100));
+    g = Math.floor(g * (1 - percent / 100));
+    b = Math.floor(b * (1 - percent / 100));
+
+    const toHex = (n: number) => n.toString(16).padStart(2, '0');
+    return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+};
 
 // --- Audio Manager ---
 class AudioManager {
@@ -10,60 +26,42 @@ class AudioManager {
   private nextNoteTime: number = 0;
   private timerID: number | undefined;
   
-  // Normal Melody: 20s Variation in C Major (Upbeat)
   private melodyNormal = [
-    // Part A: Intro Arpeggios (C Major)
-    { freq: 261.63, len: 0.2 }, { freq: 329.63, len: 0.2 }, { freq: 392.00, len: 0.2 }, { freq: 523.25, len: 0.2 }, // C-E-G-C
-    { freq: 392.00, len: 0.2 }, { freq: 523.25, len: 0.2 }, { freq: 659.25, len: 0.4 }, // G-C-E (hold)
-    { freq: 261.63, len: 0.2 }, { freq: 329.63, len: 0.2 }, { freq: 392.00, len: 0.2 }, { freq: 261.63, len: 0.2 }, // C-E-G-C
-    { freq: 293.66, len: 0.2 }, { freq: 349.23, len: 0.2 }, { freq: 392.00, len: 0.4 }, // D-F-G (hold)
-
-    // Part B: Running Theme (A Minor / F Major feel)
-    { freq: 440.00, len: 0.2 }, { freq: 523.25, len: 0.2 }, { freq: 440.00, len: 0.2 }, { freq: 349.23, len: 0.2 }, // A-C-A-F
-    { freq: 329.63, len: 0.2 }, { freq: 261.63, len: 0.2 }, { freq: 196.00, len: 0.4 }, // E-C-G3 (hold)
-    { freq: 349.23, len: 0.2 }, { freq: 440.00, len: 0.2 }, { freq: 523.25, len: 0.2 }, { freq: 587.33, len: 0.2 }, // F-A-C-D
-    { freq: 659.25, len: 0.2 }, { freq: 523.25, len: 0.2 }, { freq: 392.00, len: 0.4 }, // E-C-G (hold)
-
-    // Part C: High Energy Scales
-    { freq: 523.25, len: 0.15 }, { freq: 587.33, len: 0.15 }, { freq: 659.25, len: 0.15 }, { freq: 698.46, len: 0.15 }, // C-D-E-F (fast)
-    { freq: 783.99, len: 0.15 }, { freq: 698.46, len: 0.15 }, { freq: 659.25, len: 0.15 }, { freq: 587.33, len: 0.15 }, // G-F-E-D (fast)
-    { freq: 523.25, len: 0.2 }, { freq: 392.00, len: 0.2 }, { freq: 329.63, len: 0.2 }, { freq: 261.63, len: 0.2 }, // C-G-E-C
-    
-    // Turnaround
-    { freq: 293.66, len: 0.2 }, { freq: 392.00, len: 0.2 }, { freq: 493.88, len: 0.2 }, { freq: 587.33, len: 0.2 }, // D-G-B-D
-    { freq: 523.25, len: 0.4 }, { freq: 0, len: 0.2 } // C (End)
+    { freq: 261.63, len: 0.2 }, { freq: 329.63, len: 0.2 }, { freq: 392.00, len: 0.2 }, { freq: 523.25, len: 0.2 },
+    { freq: 392.00, len: 0.2 }, { freq: 523.25, len: 0.2 }, { freq: 659.25, len: 0.4 },
+    { freq: 261.63, len: 0.2 }, { freq: 329.63, len: 0.2 }, { freq: 392.00, len: 0.2 }, { freq: 261.63, len: 0.2 },
+    { freq: 293.66, len: 0.2 }, { freq: 349.23, len: 0.2 }, { freq: 392.00, len: 0.4 },
+    { freq: 440.00, len: 0.2 }, { freq: 523.25, len: 0.2 }, { freq: 440.00, len: 0.2 }, { freq: 349.23, len: 0.2 },
+    { freq: 329.63, len: 0.2 }, { freq: 261.63, len: 0.2 }, { freq: 196.00, len: 0.4 },
+    { freq: 349.23, len: 0.2 }, { freq: 440.00, len: 0.2 }, { freq: 523.25, len: 0.2 }, { freq: 587.33, len: 0.2 },
+    { freq: 659.25, len: 0.2 }, { freq: 523.25, len: 0.2 }, { freq: 392.00, len: 0.4 },
+    { freq: 523.25, len: 0.15 }, { freq: 587.33, len: 0.15 }, { freq: 659.25, len: 0.15 }, { freq: 698.46, len: 0.15 },
+    { freq: 783.99, len: 0.15 }, { freq: 698.46, len: 0.15 }, { freq: 659.25, len: 0.15 }, { freq: 587.33, len: 0.15 },
+    { freq: 523.25, len: 0.2 }, { freq: 392.00, len: 0.2 }, { freq: 329.63, len: 0.2 }, { freq: 261.63, len: 0.2 },
+    { freq: 293.66, len: 0.2 }, { freq: 392.00, len: 0.2 }, { freq: 493.88, len: 0.2 }, { freq: 587.33, len: 0.2 },
+    { freq: 523.25, len: 0.4 }, { freq: 0, len: 0.2 }
   ];
 
-  // Hard Mode Melody: Extended 20s Loop (Fast, A Minor, Tense)
-  // Approx 150BPM feel (0.1s - 0.2s notes)
   private melodyHard = [
-    // --- SECTION A: The Chase (A Minor Arpeggios) ---
-    { freq: 440.00, len: 0.1 }, { freq: 0, len: 0.05 }, { freq: 440.00, len: 0.1 }, { freq: 523.25, len: 0.1 }, // A-A-C
-    { freq: 659.25, len: 0.1 }, { freq: 523.25, len: 0.1 }, { freq: 440.00, len: 0.1 }, { freq: 349.23, len: 0.1 }, // E-C-A-F
-    { freq: 329.63, len: 0.1 }, { freq: 440.00, len: 0.1 }, { freq: 523.25, len: 0.1 }, { freq: 659.25, len: 0.1 }, // E-A-C-E
-    { freq: 880.00, len: 0.2 }, { freq: 659.25, len: 0.2 }, // High A - E
-
-    { freq: 440.00, len: 0.1 }, { freq: 0, len: 0.05 }, { freq: 440.00, len: 0.1 }, { freq: 523.25, len: 0.1 }, // A-A-C
-    { freq: 659.25, len: 0.1 }, { freq: 523.25, len: 0.1 }, { freq: 440.00, len: 0.1 }, { freq: 349.23, len: 0.1 }, // E-C-A-F
-    { freq: 493.88, len: 0.1 }, { freq: 587.33, len: 0.1 }, { freq: 698.46, len: 0.1 }, { freq: 830.61, len: 0.1 }, // B-D-F-Ab (Diminished climb)
+    { freq: 440.00, len: 0.1 }, { freq: 0, len: 0.05 }, { freq: 440.00, len: 0.1 }, { freq: 523.25, len: 0.1 },
+    { freq: 659.25, len: 0.1 }, { freq: 523.25, len: 0.1 }, { freq: 440.00, len: 0.1 }, { freq: 349.23, len: 0.1 },
+    { freq: 329.63, len: 0.1 }, { freq: 440.00, len: 0.1 }, { freq: 523.25, len: 0.1 }, { freq: 659.25, len: 0.1 },
+    { freq: 880.00, len: 0.2 }, { freq: 659.25, len: 0.2 },
+    { freq: 440.00, len: 0.1 }, { freq: 0, len: 0.05 }, { freq: 440.00, len: 0.1 }, { freq: 523.25, len: 0.1 },
+    { freq: 659.25, len: 0.1 }, { freq: 523.25, len: 0.1 }, { freq: 440.00, len: 0.1 }, { freq: 349.23, len: 0.1 },
+    { freq: 493.88, len: 0.1 }, { freq: 587.33, len: 0.1 }, { freq: 698.46, len: 0.1 }, { freq: 830.61, len: 0.1 },
     { freq: 880.00, len: 0.2 }, { freq: 0, len: 0.1 },
-
-    // --- SECTION B: Rising Tension (Chromatic / Fast) ---
-    { freq: 523.25, len: 0.1 }, { freq: 554.37, len: 0.1 }, { freq: 587.33, len: 0.1 }, { freq: 622.25, len: 0.1 }, // Chromatic C -> Eb
-    { freq: 659.25, len: 0.1 }, { freq: 698.46, len: 0.1 }, { freq: 739.99, len: 0.1 }, { freq: 783.99, len: 0.1 }, // Chromatic E -> G
-    { freq: 880.00, len: 0.1 }, { freq: 0, len: 0.05 }, { freq: 880.00, len: 0.1 }, { freq: 0, len: 0.05 }, // A Stabs
-    { freq: 830.61, len: 0.1 }, { freq: 783.99, len: 0.1 }, { freq: 739.99, len: 0.1 }, { freq: 698.46, len: 0.1 }, // Descent
-
-    // --- SECTION C: The Danger Zone (Low rumble + High trills) ---
-    { freq: 220.00, len: 0.1 }, { freq: 220.00, len: 0.1 }, { freq: 329.63, len: 0.1 }, { freq: 220.00, len: 0.1 }, // Low A Riff
-    { freq: 1046.50, len: 0.05 }, { freq: 987.77, len: 0.05 }, { freq: 1046.50, len: 0.1 }, // High Trill
-    { freq: 220.00, len: 0.1 }, { freq: 220.00, len: 0.1 }, { freq: 349.23, len: 0.1 }, { freq: 220.00, len: 0.1 }, // Low A Riff
-    { freq: 1174.66, len: 0.05 }, { freq: 1108.73, len: 0.05 }, { freq: 1174.66, len: 0.1 }, // High Trill
-
-    // --- SECTION D: Loop Turnaround (Dm -> E7 -> Am) ---
-    { freq: 587.33, len: 0.15 }, { freq: 698.46, len: 0.15 }, { freq: 880.00, len: 0.15 }, { freq: 1046.50, len: 0.15 }, // Dm Arp
-    { freq: 659.25, len: 0.15 }, { freq: 830.61, len: 0.15 }, { freq: 987.77, len: 0.15 }, { freq: 1318.51, len: 0.15 }, // E7 Arp
-    { freq: 880.00, len: 0.3 }, { freq: 440.00, len: 0.2 }, { freq: 220.00, len: 0.2 }, { freq: 0, len: 0.1 } // Hit A
+    { freq: 523.25, len: 0.1 }, { freq: 554.37, len: 0.1 }, { freq: 587.33, len: 0.1 }, { freq: 622.25, len: 0.1 },
+    { freq: 659.25, len: 0.1 }, { freq: 698.46, len: 0.1 }, { freq: 739.99, len: 0.1 }, { freq: 783.99, len: 0.1 },
+    { freq: 880.00, len: 0.1 }, { freq: 0, len: 0.05 }, { freq: 880.00, len: 0.1 }, { freq: 0, len: 0.05 },
+    { freq: 830.61, len: 0.1 }, { freq: 783.99, len: 0.1 }, { freq: 739.99, len: 0.1 }, { freq: 698.46, len: 0.1 },
+    { freq: 220.00, len: 0.1 }, { freq: 220.00, len: 0.1 }, { freq: 329.63, len: 0.1 }, { freq: 220.00, len: 0.1 },
+    { freq: 1046.50, len: 0.05 }, { freq: 987.77, len: 0.05 }, { freq: 1046.50, len: 0.1 },
+    { freq: 220.00, len: 0.1 }, { freq: 220.00, len: 0.1 }, { freq: 349.23, len: 0.1 }, { freq: 220.00, len: 0.1 },
+    { freq: 1174.66, len: 0.05 }, { freq: 1108.73, len: 0.05 }, { freq: 1174.66, len: 0.1 },
+    { freq: 587.33, len: 0.15 }, { freq: 698.46, len: 0.15 }, { freq: 880.00, len: 0.15 }, { freq: 1046.50, len: 0.15 },
+    { freq: 659.25, len: 0.15 }, { freq: 830.61, len: 0.15 }, { freq: 987.77, len: 0.15 }, { freq: 1318.51, len: 0.15 },
+    { freq: 880.00, len: 0.3 }, { freq: 440.00, len: 0.2 }, { freq: 220.00, len: 0.2 }, { freq: 0, len: 0.1 }
   ];
 
   private currentNoteIndex = 0;
@@ -73,24 +71,19 @@ class AudioManager {
     if (!this.ctx) {
       this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
     }
-    // Attempt to resume if suspended (browser autoplay policy)
     if (this.ctx.state === 'suspended') {
       this.ctx.resume().catch(() => {});
     }
   }
 
-  // Public method to force resume (bind to user interaction)
   resume() {
     this.init();
   }
 
   playBgm(mode: 'normal' | 'hard' = 'normal') {
     this.init();
-    // Stop if already playing to allow restart or mode switch
     this.stopBgm();
-
     if (!this.ctx) return;
-    
     this.isBgmPlaying = true;
     this.currentNoteIndex = 0;
     this.nextNoteTime = this.ctx.currentTime + 0.1;
@@ -109,8 +102,6 @@ class AudioManager {
 
   private scheduler() {
     if (!this.isBgmPlaying || !this.ctx) return;
-    
-    // Schedule notes ahead (lookahead 0.1s)
     while (this.nextNoteTime < this.ctx.currentTime + 0.1) {
         this.scheduleNote(this.currentMelody[this.currentNoteIndex], this.nextNoteTime);
         this.nextNoteTime += this.currentMelody[this.currentNoteIndex].len;
@@ -121,25 +112,18 @@ class AudioManager {
 
   private scheduleNote(note: {freq: number, len: number}, time: number) {
       if (!this.ctx) return;
-      if (note.freq === 0) return; // Rest
-
+      if (note.freq === 0) return; 
       const osc = this.ctx.createOscillator();
       const gain = this.ctx.createGain();
-      
-      osc.type = this.currentMelody === this.melodyHard ? 'sawtooth' : 'triangle'; // Sawtooth for harsher/tense sound in Hard mode
+      osc.type = this.currentMelody === this.melodyHard ? 'sawtooth' : 'triangle'; 
       osc.frequency.value = note.freq;
-      
       osc.connect(gain);
       gain.connect(this.ctx.destination);
-      
-      // Envelope to make it sound plucky yet continuous
       gain.gain.setValueAtTime(0, time);
-      gain.gain.linearRampToValueAtTime(0.08, time + 0.02); // Attack
-      gain.gain.exponentialRampToValueAtTime(0.01, time + note.len - 0.02); // Decay
-
+      gain.gain.linearRampToValueAtTime(0.08, time + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.01, time + note.len - 0.02);
       osc.start(time);
       osc.stop(time + note.len);
-      
       this.bgmOscillators.push(osc);
       if (this.bgmOscillators.length > 50) this.bgmOscillators.shift();
   }
@@ -149,14 +133,11 @@ class AudioManager {
       if (!this.ctx) return;
       const osc = this.ctx.createOscillator();
       const gain = this.ctx.createGain();
-      
       osc.type = 'sine';
       osc.frequency.setValueAtTime(600, this.ctx.currentTime);
       osc.frequency.exponentialRampToValueAtTime(300, this.ctx.currentTime + 0.05);
-      
       gain.gain.setValueAtTime(0.05, this.ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.05);
-      
       osc.connect(gain);
       gain.connect(this.ctx.destination);
       osc.start();
@@ -168,14 +149,11 @@ class AudioManager {
       if (!this.ctx) return;
       const osc = this.ctx.createOscillator();
       const gain = this.ctx.createGain();
-      
       osc.type = 'sine';
       osc.frequency.setValueAtTime(880, this.ctx.currentTime); 
       osc.frequency.exponentialRampToValueAtTime(1760, this.ctx.currentTime + 0.1); 
-      
       gain.gain.setValueAtTime(0.1, this.ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.1);
-      
       osc.connect(gain);
       gain.connect(this.ctx.destination);
       osc.start();
@@ -191,10 +169,8 @@ class AudioManager {
           const gain = this.ctx!.createGain();
           osc.type = 'triangle';
           osc.frequency.value = freq;
-          
           gain.gain.setValueAtTime(0.1, now + i*0.08);
           gain.gain.exponentialRampToValueAtTime(0.001, now + i*0.08 + 0.2);
-          
           osc.connect(gain);
           gain.connect(this.ctx!.destination);
           osc.start(now + i*0.08);
@@ -207,21 +183,18 @@ class AudioManager {
       if (!this.ctx) return;
       const now = this.ctx.currentTime;
       const notes = [
-          {f: 523.25, t: 0, d: 0.1}, {f: 523.25, t: 0.1, d: 0.1}, {f: 523.25, t: 0.2, d: 0.1}, // Triplet C
-          {f: 783.99, t: 0.3, d: 0.3}, // Long G
-          {f: 1046.50, t: 0.6, d: 0.6} // Long High C
+          {f: 523.25, t: 0, d: 0.1}, {f: 523.25, t: 0.1, d: 0.1}, {f: 523.25, t: 0.2, d: 0.1}, 
+          {f: 783.99, t: 0.3, d: 0.3}, 
+          {f: 1046.50, t: 0.6, d: 0.6} 
       ];
-
       notes.forEach(n => {
           const osc = this.ctx!.createOscillator();
           const gain = this.ctx!.createGain();
           osc.type = 'square'; 
           osc.frequency.value = n.f;
-          
           gain.gain.setValueAtTime(0.1, now + n.t);
           gain.gain.linearRampToValueAtTime(0.08, now + n.t + 0.05); 
           gain.gain.exponentialRampToValueAtTime(0.001, now + n.t + n.d); 
-          
           osc.connect(gain);
           gain.connect(this.ctx!.destination);
           osc.start(now + n.t);
@@ -234,14 +207,11 @@ class AudioManager {
       if (!this.ctx) return;
       const osc = this.ctx.createOscillator();
       const gain = this.ctx.createGain();
-      
       osc.type = 'square'; 
       osc.frequency.setValueAtTime(300, this.ctx.currentTime);
       osc.frequency.exponentialRampToValueAtTime(50, this.ctx.currentTime + 0.15);
-      
       gain.gain.setValueAtTime(0.15, this.ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.15);
-      
       osc.connect(gain);
       gain.connect(this.ctx.destination);
       osc.start();
@@ -270,6 +240,8 @@ export const savePlayerData = (state: PlayerState) => {
   if (state.mode === 'test') return;
   const dataToSave = {
     level: state.level,
+    maxHearts: state.maxHearts,
+    jumpBonus: state.jumpBonus, // Persist jump bonus
     unlockedSkins: state.unlockedSkins,
     currentSkin: state.currentSkin,
     currentCandySkin: state.currentCandySkin,
@@ -282,7 +254,6 @@ export const savePlayerData = (state: PlayerState) => {
     dailyPlayCount: state.dailyPlayCount,
     dailyShopCount: state.dailyShopCount,
     lastGamingDate: state.lastGamingDate,
-    // Fix: Added missing fields to persistence
     activeTitle: state.activeTitle,
     unlockedTitles: state.unlockedTitles,
     stats: state.stats,
@@ -304,7 +275,6 @@ export const getGamingDate = (): string => {
   if (now.getHours() < 8) {
       now.setDate(now.getDate() - 1);
   }
-  // Use manual YYYY-MM-DD formatting to prevent locale issues across devices
   const y = now.getFullYear();
   const m = String(now.getMonth() + 1).padStart(2, '0');
   const d = String(now.getDate()).padStart(2, '0');
@@ -318,7 +288,7 @@ export const getRandomColor = () => {
     return color;
 };
 
-// --- Character Drawing Logic (Reuse) ---
+// --- Character Drawing Logic ---
 export const drawCharacter = (
     ctx: CanvasRenderingContext2D, 
     x: number, 
@@ -329,11 +299,17 @@ export const drawCharacter = (
     isSliding: boolean, 
     expression: string, 
     dy: number, 
-    grounded: boolean
+    grounded: boolean,
+    isInvincible?: boolean
 ) => {
     ctx.save(); 
+    
+    if (isInvincible) {
+        ctx.globalAlpha = (Math.floor(animTick / 100) % 2 === 0) ? 0.3 : 0.8;
+    }
+
     ctx.translate(x, y);
-    ctx.scale(1.4, 1.4); // 1.4x scale
+    ctx.scale(1.4, 1.4); 
 
     if (isSliding) {
         ctx.rotate(-Math.PI / 2); 
@@ -348,16 +324,15 @@ export const drawCharacter = (
 
     const grad = ctx.createLinearGradient(-10, -20, 10, 20);
     grad.addColorStop(0, skinColor);
-    grad.addColorStop(1, '#8d6e63'); 
+    grad.addColorStop(1, darkenColor(skinColor, 20)); 
 
     ctx.fillStyle = grad; 
-    ctx.strokeStyle = "#5d4037"; 
+    ctx.strokeStyle = darkenColor(skinColor, 40); // Natural outline based on skin
     ctx.lineWidth = 2.5;
     
     const runAnim = Math.sin(animTick / 60) * 12; 
     const isJumping = !grounded && !isSliding;
 
-    // Legs
     const drawLeg = (angle: number) => {
         ctx.save();
         ctx.translate(0, 12); 
@@ -398,54 +373,39 @@ export const drawCharacter = (
     if (isJumping) {
         drawLeg(30); drawLeg(-20); 
     } else {
-        if (isSliding) { 
-            // Sliding legs
-            drawLeg(10); 
-        }
+        if (isSliding) drawLeg(10); 
         else { drawLeg(runAnim * 3); drawLeg(-runAnim * 3); }
     }
 
-    // Body
     ctx.fillStyle = grad; 
-    ctx.strokeStyle = "#5d4037"; ctx.lineWidth = 2.5;
-    
-    // Draw body skin first
+    ctx.strokeStyle = darkenColor(skinColor, 40); 
+    ctx.lineWidth = 2.5;
     ctx.beginPath(); ctx.roundRect(-8, -15, 16, 30, 8); ctx.fill(); ctx.stroke();
 
-    // Clothes Logic - Side View & Body Fit
     if (equipped.clothes) {
-        // TIGHT CLOTHES (Clip to Body)
         if (['overalls', 'suit', 'hoodie', 'tuxedo', 'armor', 'jersey', 'hanbok', 'dress', 'raincoat'].includes(equipped.clothes)) {
              ctx.save();
-             // Clip to the round body shape for tight fitting items
-             
              if (['overalls', 'suit', 'hoodie', 'armor', 'jersey'].includes(equipped.clothes)) {
                  ctx.beginPath(); ctx.roundRect(-8, -15, 16, 30, 8); ctx.clip();
              }
-
              if (equipped.clothes === 'overalls') {
-                 // Pants
                  ctx.fillStyle = "#1976d2"; ctx.fillRect(-8, 0, 16, 15);
-                 // Bib (Side view - Strap + Front)
                  ctx.fillRect(-8, -5, 16, 20); 
-                 ctx.fillStyle = "#1565c0"; ctx.beginPath(); ctx.arc(0, 0, 3, 0, Math.PI*2); ctx.fill(); // Button
+                 ctx.fillStyle = "#1565c0"; ctx.beginPath(); ctx.arc(0, 0, 3, 0, Math.PI*2); ctx.fill();
              } 
              else if (equipped.clothes === 'suit') {
                  ctx.fillStyle = "#212121"; ctx.fillRect(-8, -15, 16, 30);
-                 // White shirt showing at neck/front
                  ctx.fillStyle = "white"; ctx.beginPath(); ctx.moveTo(8, -15); ctx.lineTo(8, -5); ctx.lineTo(0, -15); ctx.fill();
-                 ctx.fillStyle = "red"; ctx.fillRect(6, -10, 2, 5); // Tie hint
+                 ctx.fillStyle = "red"; ctx.fillRect(6, -10, 2, 5);
              }
              else if (equipped.clothes === 'hoodie') {
                 ctx.fillStyle = "#757575"; ctx.fillRect(-8, -15, 16, 30);
-                // Hood bump on back (Left side)
                 ctx.beginPath(); ctx.moveTo(-8, -15); ctx.quadraticCurveTo(-12, -10, -8, -5); ctx.fill();
-                // Pocket line
                 ctx.fillStyle = "#616161"; ctx.fillRect(0, 5, 8, 8);
              }
              else if (equipped.clothes === 'armor') {
                 ctx.fillStyle = "#b0bec5"; ctx.fillRect(-8, -15, 16, 30);
-                ctx.fillStyle = "#78909c"; ctx.fillRect(-4, -5, 8, 10); // Plate detail
+                ctx.fillStyle = "#78909c"; ctx.fillRect(-4, -5, 8, 10);
              }
              else if (equipped.clothes === 'jersey') {
                 ctx.fillStyle = "#0d47a1"; ctx.fillRect(-8, -15, 16, 30);
@@ -453,65 +413,52 @@ export const drawCharacter = (
              }
              ctx.restore();
 
-             // LOOSE CLOTHES (Draw Over Body)
              if (equipped.clothes === 'tuxedo') {
-                 // Body part (clipped manually by drawing inside)
                  ctx.save();
                  ctx.beginPath(); ctx.roundRect(-8, -15, 16, 30, 8); ctx.clip();
                  ctx.fillStyle = "black"; ctx.fillRect(-8, -15, 16, 30);
-                 ctx.fillStyle = "white"; ctx.fillRect(0, -15, 8, 20); // Front shirt
+                 ctx.fillStyle = "white"; ctx.fillRect(0, -15, 8, 20);
                  ctx.restore();
-                 // Tailcoat (extends back/left)
                  ctx.fillStyle = "black"; ctx.beginPath(); ctx.moveTo(-5, 5); ctx.lineTo(-12, 15); ctx.lineTo(-5, 15); ctx.fill();
              }
              else if (equipped.clothes === 'dress') {
-                 // Top part (tight)
                  ctx.save(); ctx.beginPath(); ctx.roundRect(-8, -15, 16, 15, 8); ctx.clip();
                  ctx.fillStyle = "#e91e63"; ctx.fillRect(-8, -15, 16, 30);
                  ctx.restore();
-                 // Skirt part (flares out)
                  ctx.fillStyle = "#e91e63"; 
                  ctx.beginPath(); ctx.moveTo(-6, 0); ctx.lineTo(6, 0); ctx.lineTo(10, 15); ctx.quadraticCurveTo(0, 18, -10, 15); ctx.fill();
              }
              else if (equipped.clothes === 'raincoat') {
-                 // Round Poncho shape (covering body)
                  ctx.fillStyle = "#ffeb3b";
-                 // Draw a circle/oval shape that covers the body rect
                  ctx.beginPath(); 
                  ctx.ellipse(0, -5, 12, 20, 0, 0, Math.PI*2); 
                  ctx.fill();
-                 // Hood detail (small line)
                  ctx.strokeStyle = "#fbc02d"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(-5, -20); ctx.lineTo(0, -23); ctx.stroke();
              }
              else if (equipped.clothes === 'hanbok') {
-                 // Jeogori (Top) - Short jacket
                  ctx.fillStyle = "#ce93d8"; 
                  ctx.save(); ctx.beginPath(); ctx.roundRect(-8, -15, 16, 12, 8); ctx.clip(); ctx.fillRect(-8, -15, 16, 30); ctx.restore();
-                 // Chima/Baji (Bottom) - Flared
                  ctx.fillStyle = "#f48fb1"; 
                  ctx.beginPath(); ctx.moveTo(-7, -3); ctx.lineTo(7, -3); ctx.lineTo(11, 15); ctx.quadraticCurveTo(0, 18, -11, 15); ctx.fill();
-                 // Tie detail
                  ctx.fillStyle = "#ef5350"; ctx.fillRect(2, -5, 4, 8);
              }
         }
     }
 
-    // Arm (One arm only for side view)
     function drawArm(angle: number) {
         ctx.save();
         ctx.translate(0, -8); 
         ctx.rotate(angle * (Math.PI / 180));
         ctx.fillStyle = grad; 
-        
+        ctx.strokeStyle = darkenColor(skinColor, 40);
         ctx.beginPath();
         ctx.roundRect(-3.5, 0, 7, 18, 3.5);
         ctx.fill(); ctx.stroke();
 
-        // Sleeve (If clothes equipped)
         if (equipped.clothes) {
-             ctx.save(); ctx.clip(); // Clip to arm shape
+             ctx.save(); ctx.clip(); 
              if (['overalls', 'suit', 'hoodie', 'tuxedo', 'armor', 'jersey', 'raincoat', 'hanbok'].includes(equipped.clothes)) {
-                 if(equipped.clothes === 'overalls') ctx.fillStyle = "#1565c0"; // Blue shirt under?
+                 if(equipped.clothes === 'overalls') ctx.fillStyle = "#1565c0"; 
                  else if(equipped.clothes === 'suit' || equipped.clothes === 'tuxedo') ctx.fillStyle = "black";
                  else if(equipped.clothes === 'hoodie') ctx.fillStyle = "#757575";
                  else if(equipped.clothes === 'armor') ctx.fillStyle = "#b0bec5";
@@ -519,18 +466,15 @@ export const drawCharacter = (
                  else if(equipped.clothes === 'raincoat') ctx.fillStyle = "#ffeb3b";
                  else if(equipped.clothes === 'hanbok') ctx.fillStyle = "#ce93d8";
                  
-                 // Sleeve usually covers top half of arm
                  if (equipped.clothes !== 'overalls') ctx.fillRect(-5, 0, 10, 12); 
-                 else ctx.fillRect(-5, 0, 10, 4); // Short sleeve for overalls
+                 else ctx.fillRect(-5, 0, 10, 4); 
              }
              ctx.restore();
         }
 
-        // Weapon Handling
         if (equipped.weapon) {
             ctx.save();
-            ctx.translate(0, 15); // Move to hand
-            
+            ctx.translate(0, 15); 
             if (equipped.weapon === 'sword') {
                  ctx.fillStyle = "#cfd8dc"; ctx.fillRect(0, -2, 35, 4); 
                  ctx.fillStyle = "#5d4037"; ctx.fillRect(-5, -2, 5, 4); 
@@ -566,24 +510,21 @@ export const drawCharacter = (
             ctx.restore();
         }
         
-        // Sleeve edge if no clothes
         if (!equipped.clothes) { ctx.strokeStyle = "white"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-2, 14); ctx.lineTo(2, 14); ctx.stroke(); }
         ctx.restore();
     }
 
-    if (isJumping) {
-        drawArm(-130); 
-    } else {
-        if (isSliding) { drawArm(160); }
-        else { drawArm(runAnim * 3); }
+    if (isJumping) drawArm(-130); 
+    else {
+        if (isSliding) drawArm(160); 
+        else drawArm(runAnim * 3); 
     }
 
-    // Head
     ctx.fillStyle = grad; 
-    ctx.strokeStyle = "#5d4037"; ctx.lineWidth = 2.5;
+    ctx.strokeStyle = darkenColor(skinColor, 40);
+    ctx.lineWidth = 2.5;
     ctx.beginPath(); ctx.arc(2, -26, 14, 0, Math.PI*2); ctx.fill(); ctx.stroke();
 
-    // Face
     ctx.strokeStyle = "rgba(255,255,255,0.8)"; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.arc(2, -26, 11, Math.PI, 1.5 * Math.PI); ctx.stroke();
 
@@ -600,7 +541,6 @@ export const drawCharacter = (
         }
     }
 
-    // Hat
     if (equipped.hat) {
         if (equipped.hat === 'cap') {
             ctx.fillStyle = "#1e88e5"; ctx.beginPath(); ctx.arc(2, -30, 14, Math.PI, 0); ctx.fill(); ctx.fillRect(2, -30, 16, 4);
@@ -611,18 +551,16 @@ export const drawCharacter = (
         } else if (equipped.hat === 'helmet') {
              ctx.fillStyle = "#ffeb3b"; ctx.beginPath(); ctx.arc(2, -32, 15, Math.PI, 0); ctx.fill(); ctx.fillRect(-13, -32, 26, 4);
         } else if (equipped.hat === 'beret') {
-             // Moved up: y-45 instead of y-35 base, adjust ellipse
              ctx.fillStyle = "#d32f2f"; ctx.beginPath(); ctx.ellipse(2, -40, 16, 10, 0.2, 0, Math.PI*2); ctx.fill(); ctx.fillRect(0,-50, 2, 6);
         } else if (equipped.hat === 'partyhat') {
              ctx.fillStyle = "#ab47bc"; ctx.beginPath(); ctx.moveTo(-8, -32); ctx.lineTo(12, -32); ctx.lineTo(2, -55); ctx.fill();
         } else if (equipped.hat === 'headphone') {
-            // Side view: Band over head, one cup visible
             ctx.strokeStyle = "#333"; ctx.lineWidth = 4; 
-            ctx.beginPath(); ctx.arc(2, -26, 17, Math.PI, 0); ctx.stroke(); // Band
+            ctx.beginPath(); ctx.arc(2, -26, 17, Math.PI, 0); ctx.stroke(); 
             ctx.fillStyle = "#ef5350"; 
-            ctx.beginPath(); ctx.arc(2, -26, 8, 0, Math.PI*2); ctx.fill(); // Cup
+            ctx.beginPath(); ctx.arc(2, -26, 8, 0, Math.PI*2); ctx.fill(); 
             ctx.fillStyle = "#333"; 
-            ctx.beginPath(); ctx.arc(2, -26, 4, 0, Math.PI*2); ctx.fill(); // Detail
+            ctx.beginPath(); ctx.arc(2, -26, 4, 0, Math.PI*2); ctx.fill(); 
         } else if (equipped.hat === 'flower') {
             ctx.fillStyle = "#ff4081"; ctx.beginPath(); ctx.arc(10, -35, 5, 0, Math.PI*2); ctx.fill();
             ctx.fillStyle = "white"; ctx.beginPath(); ctx.arc(10, -35, 2, 0, Math.PI*2); ctx.fill();
@@ -635,29 +573,21 @@ export const drawCharacter = (
     ctx.restore();
 };
 
-// 3D Candy Drawer
 export const drawCandySimple = (ctx: CanvasRenderingContext2D, x: number, y: number, r: number, candyIdx: number) => {
     ctx.save(); ctx.translate(x, y);
-
     const typeIdx = Math.floor(candyIdx / 5);
     const colorIdx = candyIdx % 5;
     const color = CANDY_COLORS[colorIdx] || CANDY_COLORS[0];
     const type = CANDY_TYPES[typeIdx] || 'basic';
-
-    // Shadow
     ctx.fillStyle = "rgba(0,0,0,0.2)";
     ctx.beginPath(); ctx.ellipse(2, 2, r, r*0.8, 0, 0, Math.PI*2); ctx.fill();
-
-    // Base Gradient
     const grad = ctx.createRadialGradient(-r/3, -r/3, r/4, 0, 0, r);
     grad.addColorStop(0, "white");
     grad.addColorStop(0.3, color);
-    grad.addColorStop(1, adjustColor(color, -40));
-
+    grad.addColorStop(1, darkenColor(color, 30));
     if (type === 'basic') {
         ctx.fillStyle = grad;
         ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI*2); ctx.fill();
-        // Highlight
         ctx.fillStyle = "rgba(255,255,255,0.7)";
         ctx.beginPath(); ctx.ellipse(-r/3, -r/3, r/3, r/5, -Math.PI/4, 0, Math.PI*2); ctx.fill();
     } 
@@ -666,34 +596,25 @@ export const drawCandySimple = (ctx: CanvasRenderingContext2D, x: number, y: num
         ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI*2); ctx.fill();
         ctx.clip();
         ctx.fillStyle = "rgba(255,255,255,0.4)";
-        for(let i=-r; i<r; i+=8) {
-            ctx.fillRect(i, -r, 4, r*2);
-        }
+        for(let i=-r; i<r; i+=8) ctx.fillRect(i, -r, 4, r*2);
     }
     else if (type === 'lollipop') {
         ctx.fillStyle = grad;
         ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI*2); ctx.fill();
-        // Swirl
         ctx.strokeStyle = "rgba(255,255,255,0.6)"; ctx.lineWidth = 3;
         ctx.beginPath();
-        for(let i=0; i<10; i++) {
-            ctx.arc(0, 0, i*2, 0 + i*0.5, Math.PI + i*0.5);
-        }
+        for(let i=0; i<10; i++) ctx.arc(0, 0, i*2, 0 + i*0.5, Math.PI + i*0.5);
         ctx.stroke();
     }
     else if (type === 'wrapped') {
-        // Wrapper Wings
         ctx.fillStyle = color;
         ctx.beginPath(); ctx.moveTo(-r, 0); ctx.lineTo(-r-8, -8); ctx.lineTo(-r-8, 8); ctx.fill();
         ctx.beginPath(); ctx.moveTo(r, 0); ctx.lineTo(r+8, -8); ctx.lineTo(r+8, 8); ctx.fill();
-        
         ctx.fillStyle = grad;
         ctx.beginPath(); ctx.roundRect(-r, -r*0.7, r*2, r*1.4, 5); ctx.fill();
-        // Stripes on wrapper
         ctx.fillStyle = "rgba(255,255,255,0.3)";
         ctx.fillRect(-5, -r*0.7, 10, r*1.4);
     }
-
     ctx.restore();
 };
 
