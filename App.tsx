@@ -79,6 +79,10 @@ const App: React.FC = () => {
     const [showGameIntro, setShowGameIntro] = useState(false);
     const [showMagicLinkModal, setShowMagicLinkModal] = useState<string | null>(null);
     
+    // 신규 추가 상태
+    const [showGameGuide, setShowGameGuide] = useState(false);
+    const [showGachaInfo, setShowGachaInfo] = useState(false);
+    
     // 신규 로직 상태
     const [isBlocked, setIsBlocked] = useState(false);
     const [hasPurchasedInShop, setHasPurchasedInShop] = useState(false);
@@ -307,6 +311,85 @@ const App: React.FC = () => {
                 </Modal>
             )}
 
+            {/* 로비 게임 가이드 모달 */}
+            {showGameGuide && (
+                <Modal title="🎮 게임 상세 가이드" onClose={() => setShowGameGuide(false)}>
+                    <div className="space-y-6 max-h-[450px] overflow-y-auto pr-2 no-scrollbar">
+                        <section>
+                            <h4 className="font-black text-blue-600 mb-2 flex items-center gap-2"><i className="fa-solid fa-gamepad"></i> 기본 조작</h4>
+                            <div className="grid grid-cols-2 gap-3 text-sm">
+                                <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                                    <div className="font-bold mb-1">⬆️ 점프</div>
+                                    <p className="text-[10px] text-slate-500">한 번 더 누르면 2단 점프가 가능합니다.</p>
+                                </div>
+                                <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                                    <div className="font-bold mb-1">⬇️ 슬라이드</div>
+                                    <p className="text-[10px] text-slate-500">공중에 떠 있는 장애물을 피할 수 있습니다.</p>
+                                </div>
+                            </div>
+                        </section>
+                        <section>
+                            <h4 className="font-black text-purple-600 mb-2 flex items-center gap-2"><i className="fa-solid fa-star"></i> 점수 획득 방식</h4>
+                            <div className="bg-purple-50 p-4 rounded-xl border border-purple-100 text-xs space-y-2 font-medium text-purple-900">
+                                <p>🍬 <b>캔디 점수:</b> 획득한 캔디 개수 × 캔디 강화 레벨</p>
+                                <p>🦘 <b>점프 점수:</b> 점프 성공 횟수 × 점프 보너스 레벨</p>
+                                <p className="text-[10px] text-purple-400 italic">* 강화 레벨은 상점에서 올릴 수 있습니다.</p>
+                            </div>
+                        </section>
+                        <section>
+                            <h4 className="font-black text-orange-600 mb-2 flex items-center gap-2"><i className="fa-solid fa-fire"></i> 게임 모드</h4>
+                            <div className="space-y-2 text-xs">
+                                <div className="flex justify-between items-center p-3 bg-blue-50 rounded-xl">
+                                    <span className="font-bold">일반 모드</span>
+                                    <span className="text-blue-500 font-black">도전 횟수 1회 소모</span>
+                                </div>
+                                <div className="flex justify-between items-center p-3 bg-red-50 rounded-xl">
+                                    <span className="font-bold">하드 모드</span>
+                                    <span className="text-red-500 font-black">캔디 {config.hardModeEntryCost}개 소모 (무제한)</span>
+                                </div>
+                            </div>
+                        </section>
+                    </div>
+                    <Button onClick={() => setShowGameGuide(false)} variant="primary" className="mt-6">확인했습니다</Button>
+                </Modal>
+            )}
+
+            {/* 뽑기 정보 모달 */}
+            {showGachaInfo && (
+                <Modal title="🎁 랜덤 뽑기 리스트" onClose={() => setShowGachaInfo(false)}>
+                    <div className="space-y-4">
+                        <p className="text-sm text-slate-500 font-bold text-center">보유하지 않은 아이템 중 하나가 나옵니다!</p>
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                                <div className="text-xs font-black text-slate-400 mb-2 uppercase">👒 모자</div>
+                                <div className="text-[10px] text-slate-600 font-bold leading-relaxed">
+                                    왕관, 마술사 모자, 헬멧, 헤드셋, 바이킹 투구 등
+                                </div>
+                            </div>
+                            <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                                <div className="text-xs font-black text-slate-400 mb-2 uppercase">⚔️ 무기</div>
+                                <div className="text-[10px] text-slate-600 font-bold leading-relaxed">
+                                    요정 지팡이, 뿅망치, 광선검, 장난감 활 등
+                                </div>
+                            </div>
+                            <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                                <div className="text-xs font-black text-slate-400 mb-2 uppercase">👕 의상</div>
+                                <div className="text-[10px] text-slate-600 font-bold leading-relaxed">
+                                    정장, 드레스, 기사 갑옷, 색동 한복, 우비 등
+                                </div>
+                            </div>
+                            <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                                <div className="text-xs font-black text-slate-400 mb-2 uppercase">👟 신발</div>
+                                <div className="text-[10px] text-slate-600 font-bold leading-relaxed">
+                                    운동화, 로켓 부츠, 오리발, 스케이트 등
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <Button onClick={() => setShowGachaInfo(false)} variant="primary" className="mt-6">알겠어요</Button>
+                </Modal>
+            )}
+
             {purchaseFeedback && (
                 <Modal onClose={() => setPurchaseFeedback(null)}>
                     <div className="text-center">
@@ -509,17 +592,23 @@ const App: React.FC = () => {
                             </div>
                         </div>
 
-                        <Button onClick={() => setShowGameModeSelect(true)} variant="accent" className="py-8 text-2xl rounded-[28px] mb-6 shadow-orange-500/20">▶ 게임 시작</Button>
+                        <Button onClick={() => setShowGameModeSelect(true)} variant="accent" className="py-8 text-2xl rounded-[28px] mb-4 shadow-orange-500/20">▶ 게임 시작</Button>
+                        
                         <div className="grid grid-cols-2 gap-4 mb-4">
                             <Button onClick={() => {
                                 if (player.mode === 'student' && player.dailyShopCount >= config.shopLimit) return alert("오늘의 상점 이용 횟수를 모두 사용했어요!");
                                 setView(AppView.SHOP);
                                 setHasPurchasedInShop(false);
-                            }} variant="secondary" className="py-4 rounded-[20px] bg-slate-400"><i className="fa-solid fa-store"></i> 상점</Button>
-                            <Button onClick={() => setView(AppView.WARDROBE)} variant="secondary" className="py-4 rounded-[20px] bg-slate-400"><i className="fa-solid fa-shirt"></i> 옷장</Button>
+                            }} variant="secondary" className="py-4 rounded-[20px] bg-slate-400 mb-0"><i className="fa-solid fa-store"></i> 상점</Button>
+                            <Button onClick={() => setView(AppView.WARDROBE)} variant="secondary" className="py-4 rounded-[20px] bg-slate-400 mb-0"><i className="fa-solid fa-shirt"></i> 옷장</Button>
                         </div>
-                        <Button onClick={() => setView(AppView.RECORDS)} variant="secondary" className="py-4 rounded-[20px] bg-slate-400"><i className="fa-solid fa-trophy"></i> 명예의 전당</Button>
-                        <Button onClick={() => setView(AppView.INTRO)} variant="danger" className="mt-4 py-4 rounded-[20px] bg-red-500 shadow-red-500/20">나가기</Button>
+                        
+                        <div className="grid grid-cols-2 gap-4 mb-4">
+                            <Button onClick={() => setView(AppView.RECORDS)} variant="secondary" className="py-4 rounded-[20px] bg-slate-400 mb-0"><i className="fa-solid fa-trophy"></i> 기록</Button>
+                            <Button onClick={() => setShowGameGuide(true)} variant="dark" className="py-4 rounded-[20px] bg-slate-600 mb-0"><i className="fa-solid fa-book"></i> 게임 방법</Button>
+                        </div>
+
+                        <Button onClick={() => setView(AppView.INTRO)} variant="danger" className="mt-2 py-4 rounded-[20px] bg-red-500 shadow-red-500/20">나가기</Button>
                     </div>
                 </div>
             )}
@@ -572,6 +661,7 @@ const App: React.FC = () => {
                     <div className="bg-white rounded-[40px] p-10 w-full max-w-5xl shadow-2xl relative flex flex-col gap-8 max-h-[90vh] overflow-y-auto no-scrollbar">
                         <div className="text-center shrink-0">
                             <h2 className="text-3xl font-black text-slate-800 mb-2">아이템 상점</h2>
+                            <p className="text-xs text-slate-400 font-bold">쿠키를 사용하여 능력을 강화하거나 아이템을 뽑으세요!</p>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                             <div className="bg-slate-50 p-6 rounded-[32px] border border-slate-100 text-center flex flex-col items-center group hover:bg-white hover:shadow-xl transition-all">
@@ -607,7 +697,8 @@ const App: React.FC = () => {
                                     setPlayer(n); savePlayerData(n); setHasPurchasedInShop(true); setPurchaseFeedback({ message: "강화 성공!", subMessage: `점프 보너스가 ${n.jumpBonus}점이 되었습니다.`, icon: "fa-arrow-up" });
                                 }} variant="accent" className="mt-auto mb-0 py-3 text-sm">강화 {config.priceJumpUpgrade}🍪</Button>
                             </div>
-                            <div className="bg-slate-50 p-6 rounded-[32px] border border-slate-100 text-center flex flex-col items-center group hover:bg-white hover:shadow-xl transition-all">
+                            <div className="bg-slate-50 p-6 rounded-[32px] border border-slate-100 text-center flex flex-col items-center group hover:bg-white hover:shadow-xl transition-all relative">
+                                <button onClick={() => setShowGachaInfo(true)} className="absolute top-4 right-4 w-6 h-6 rounded-full bg-indigo-200 text-indigo-700 flex items-center justify-center text-xs hover:bg-indigo-300 transition-colors"><i className="fa-solid fa-question"></i></button>
                                 <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mb-4 text-3xl group-hover:scale-110 transition-transform">🎁</div>
                                 <h3 className="font-black text-lg mb-1">랜덤 뽑기</h3>
                                 <p className="text-xs text-slate-400 font-bold mb-2">무작위 아이템</p>
