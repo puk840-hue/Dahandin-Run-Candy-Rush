@@ -82,6 +82,7 @@ const App: React.FC = () => {
     // 신규 로직 상태
     const [isBlocked, setIsBlocked] = useState(false);
     const [hasPurchasedInShop, setHasPurchasedInShop] = useState(false);
+    const [pendingHardReset, setPendingHardReset] = useState(false); // 선생님 설정 체크박스용
 
     const [recordsDiffTab, setRecordsDiffTab] = useState<'normal' | 'hard'>('normal');
     const [wardrobeTab, setWardrobeTab] = useState<'hat' | 'weapon' | 'clothes' | 'shoes' | 'candy'>('hat');
@@ -172,9 +173,17 @@ const App: React.FC = () => {
         const serverReset = config.hardResetTimestamp || 0;
         const playerReset = loaded?.lastGlobalReset || 0;
         let pToUse: Partial<PlayerState> = loaded || {};
+
+        // 리셋 타임스탬프가 더 최신이면 리셋 수행 (쿠키와 로그는 보존)
         if (serverReset > playerReset) {
-            pToUse = { ...INITIAL_PLAYER_STATE, wallet: loaded?.wallet ?? 0, logs: loaded?.logs ?? [], lastGlobalReset: serverReset };
+            pToUse = { 
+                ...INITIAL_PLAYER_STATE, 
+                wallet: loaded?.wallet ?? 0, 
+                logs: loaded?.logs ?? [], 
+                lastGlobalReset: serverReset 
+            };
         }
+        
         const today = getGamingDate();
         if (pToUse.lastGamingDate !== today) { pToUse.dailyPlayCount = 0; pToUse.dailyShopCount = 0; pToUse.lastGamingDate = today; }
         const final: PlayerState = { ...INITIAL_PLAYER_STATE, ...pToUse, mode: 'student', code, name: fetchedName, wallet: config.api ? fetchedWallet : (pToUse.wallet ?? 100) };
@@ -264,7 +273,6 @@ const App: React.FC = () => {
         setView(AppView.LOBBY);
     };
 
-    // --- Add missing generateMagicLink function ---
     const generateMagicLink = () => {
         const dataToEncrypt = {
             api: config.api,
@@ -275,7 +283,8 @@ const App: React.FC = () => {
             priceHeartUpgrade: config.priceHeartUpgrade,
             priceJumpUpgrade: config.priceJumpUpgrade,
             hardModeEntryCost: config.hardModeEntryCost,
-            hardResetTimestamp: Date.now()
+            // 리셋 체크박스가 켜져있으면 현재 시간을 기록하여 리셋 트리거
+            hardResetTimestamp: pendingHardReset ? Date.now() : config.hardResetTimestamp
         };
         const encrypted = encryptConfig(dataToEncrypt);
         const url = `${window.location.origin}${window.location.pathname}?data=${encodeURIComponent(encrypted)}`;
@@ -440,6 +449,19 @@ const App: React.FC = () => {
                                     <div className="space-y-2"><label className="text-xs font-bold text-slate-500">하트강화 (쿠키)</label><input type="number" value={config.priceHeartUpgrade} onChange={e => setConfig({...config, priceHeartUpgrade: parseInt(e.target.value) || 0})} className="w-full p-3 bg-slate-100 rounded-xl outline-none" /></div>
                                     <div className="space-y-2"><label className="text-xs font-bold text-slate-500">점프강화 (쿠키)</label><input type="number" value={config.priceJumpUpgrade} onChange={e => setConfig({...config, priceJumpUpgrade: parseInt(e.target.value) || 0})} className="w-full p-3 bg-slate-100 rounded-xl outline-none" /></div>
                                     <div className="space-y-2"><label className="text-xs font-bold text-slate-500">하드모드 (캔디)</label><input type="number" value={config.hardModeEntryCost} onChange={e => setConfig({...config, hardModeEntryCost: parseInt(e.target.value) || 0})} className="w-full p-3 bg-slate-100 rounded-xl outline-none" /></div>
+                                </div>
+
+                                <div className="bg-rose-50 p-6 rounded-3xl border-2 border-rose-100 mt-4">
+                                    <h4 className="text-rose-800 font-black mb-3 flex items-center gap-2"><i className="fa-solid fa-triangle-exclamation"></i> 데이터 리셋 설정</h4>
+                                    <label className="flex items-center gap-4 cursor-pointer group">
+                                        <div className="relative">
+                                            <input type="checkbox" checked={pendingHardReset} onChange={e => setPendingHardReset(e.target.checked)} className="peer sr-only" />
+                                            <div className="w-11 h-6 bg-slate-200 rounded-full peer peer-checked:bg-rose-500 transition-colors"></div>
+                                            <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></div>
+                                        </div>
+                                        <span className="text-sm font-bold text-slate-600 group-hover:text-rose-600 transition-colors">학생 데이터 초기화 (쿠키 제외 전부 초기화)</span>
+                                    </label>
+                                    <p className="text-[10px] text-rose-400 mt-2 ml-15 leading-tight font-medium">이 옵션을 켜고 링크를 만들면, 접속하는 학생들의 캔디, 강화 레벨, 기록, 아이템이 모두 리셋됩니다. (쿠키 잔액은 유지)</p>
                                 </div>
                             </section>
                         </div>
