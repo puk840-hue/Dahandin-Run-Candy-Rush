@@ -16,7 +16,7 @@ const Modal: React.FC<{ children: React.ReactNode, title?: string, onClose?: () 
     </div>
 );
 
-const Button: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'secondary' | 'accent' | 'danger' | 'ghost' | 'dark' }> = ({ children, variant = 'primary', className = "", onClick, ...props }) => {
+const Button: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'secondary' | 'accent' | 'danger' | 'ghost' | 'dark' | 'success' }> = ({ children, variant = 'primary', className = "", onClick, ...props }) => {
     const base = "w-full py-4 px-6 rounded-2xl font-bold text-lg shadow-md transform transition active:scale-95 flex items-center justify-center gap-3 mb-3 disabled:opacity-50";
     const variants = {
         primary: "bg-gradient-to-r from-blue-500 to-blue-600 text-white",
@@ -24,7 +24,8 @@ const Button: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement> & { variant
         accent: "bg-gradient-to-r from-orange-400 to-orange-600 text-white",
         danger: "bg-red-500 text-white",
         ghost: "bg-white/5 border border-white/10 text-gray-400 hover:bg-white/10 hover:text-white",
-        dark: "bg-slate-800 text-white border border-slate-700 hover:bg-slate-700"
+        dark: "bg-slate-800 text-white border border-slate-700 hover:bg-slate-700",
+        success: "bg-emerald-500 text-white"
     };
     const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
         if (props.disabled) return;
@@ -78,6 +79,7 @@ const App: React.FC = () => {
     const [showTutorial, setShowTutorial] = useState(false);
     const [isGameOverOpen, setGameOverOpen] = useState(false);
     const [showGameIntro, setShowGameIntro] = useState(false);
+    const [showMagicLinkModal, setShowMagicLinkModal] = useState<string | null>(null);
 
     const [recordsDiffTab, setRecordsDiffTab] = useState<'normal' | 'hard'>('normal');
     const [recordsMetricTab, setRecordsMetricTab] = useState<'score' | 'time'>('score');
@@ -99,7 +101,6 @@ const App: React.FC = () => {
     useEffect(() => {
         if (view === AppView.LOBBY) {
             checkAchievements(player);
-            // Show intro once per session entry
             if (!sessionStorage.getItem('intro_shown')) {
                 setShowGameIntro(true);
                 sessionStorage.setItem('intro_shown', 'true');
@@ -260,6 +261,13 @@ const App: React.FC = () => {
         return `[${ach?.icon || ''} ${ach?.name || ''}] ${player.name}`;
     };
 
+    const generateMagicLink = () => {
+        const encrypted = encryptConfig(config);
+        const url = new URL(window.location.href);
+        url.searchParams.set('data', encrypted);
+        setShowMagicLinkModal(url.toString());
+    };
+
     return (
         <div className="w-screen h-screen bg-[#1a1a2e] text-slate-800 relative overflow-hidden font-pretendard">
             {showGameIntro && (
@@ -287,45 +295,13 @@ const App: React.FC = () => {
                 </Modal>
             )}
 
-            {showTitleSelect && (
-                <Modal title="🏆 칭호 선택" onClose={() => setShowTitleSelect(false)}>
-                    <div className="max-h-[350px] overflow-y-auto pr-2 no-scrollbar space-y-3">
-                        {ACHIEVEMENTS.map(ach => {
-                            const isUnlocked = player.unlockedTitles.includes(ach.id);
-                            const isActive = player.activeTitle === ach.id;
-                            return (
-                                <div key={ach.id} onClick={() => isUnlocked && toggleTitle(ach.id)} className={`p-4 rounded-2xl border-2 flex items-center gap-4 transition-all ${isUnlocked ? (isActive ? 'border-blue-500 bg-blue-50 cursor-pointer' : 'border-slate-100 bg-white hover:border-slate-200 cursor-pointer') : 'border-slate-50 bg-slate-50 opacity-50 grayscale cursor-not-allowed'}`}>
-                                    <div className="text-3xl">{ach.icon}</div>
-                                    <div className="text-left flex-1">
-                                        <div className="font-black text-slate-800">{ach.name}</div>
-                                        <div className="text-xs text-slate-400 font-medium">{ach.desc}</div>
-                                    </div>
-                                    {isActive && <i className="fa-solid fa-check text-blue-500"></i>}
-                                </div>
-                            );
-                        })}
-                    </div>
-                </Modal>
-            )}
-
-            {showWalletLogs && (
-                <Modal title="💰 쿠키 내역" onClose={() => setShowWalletLogs(false)}>
-                    <div className="max-h-[350px] overflow-y-auto pr-2 no-scrollbar space-y-2">
-                        {player.logs.length === 0 ? (
-                            <div className="text-center py-10 text-slate-400 font-bold italic">내역이 없습니다.</div>
-                        ) : (
-                            player.logs.map(log => (
-                                <div key={log.id} className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex justify-between items-center">
-                                    <div className="text-left">
-                                        <div className="text-xs text-slate-400">{log.date}</div>
-                                        <div className="font-bold text-slate-700">{log.desc}</div>
-                                    </div>
-                                    <div className={`font-black ${log.amount > 0 ? 'text-blue-600' : 'text-red-600'}`}>
-                                        {log.amount > 0 ? `+${log.amount}` : log.amount}🍪
-                                    </div>
-                                </div>
-                            ))
-                        )}
+            {showMagicLinkModal && (
+                <Modal title="🔗 매직 링크 생성 완료" onClose={() => setShowMagicLinkModal(null)}>
+                    <div className="space-y-4">
+                        <p className="text-sm text-slate-500">이 링크를 학생들에게 공유하면 설정된 환경에서 게임을 시작할 수 있습니다.</p>
+                        <textarea readOnly value={showMagicLinkModal} className="w-full h-32 p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs break-all no-scrollbar resize-none focus:outline-none" />
+                        <Button onClick={() => { navigator.clipboard.writeText(showMagicLinkModal); alert("복사되었습니다!"); }} variant="primary">링크 복사하기</Button>
+                        <Button onClick={() => setShowMagicLinkModal(null)} variant="secondary">닫기</Button>
                     </div>
                 </Modal>
             )}
@@ -345,6 +321,88 @@ const App: React.FC = () => {
                             <Button onClick={() => setView(AppView.LOGIN)} variant="primary" className="py-5"><i className="fa-solid fa-user-graduate"></i> 학생 시작하기</Button>
                             {!isMagicLink && <Button onClick={() => setView(AppView.TEACHER)} variant="dark" className="py-4 bg-purple-600/80 hover:bg-purple-600 border-none"><i className="fa-solid fa-chalkboard-user"></i> 선생님 시작하기</Button>}
                             <Button onClick={() => { setPlayer(p => ({...p, mode:'test', wallet:9999, totalCandies:9999, name:'테스트 유저'})); setView(AppView.LOBBY); }} variant="ghost" className="py-4"><i className="fa-solid fa-gamepad"></i> 테스트 모드로 체험하기</Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {view === AppView.TEACHER && (
+                <div className="w-full h-full flex items-center justify-center p-4 animate-fade-in overflow-y-auto no-scrollbar">
+                    <div className="bg-white rounded-[40px] p-8 md:p-12 w-full max-w-4xl shadow-2xl relative border-t-8 border-purple-500 flex flex-col">
+                        <div className="flex justify-between items-center mb-8 shrink-0">
+                            <div>
+                                <h2 className="text-3xl font-black text-slate-800">🏫 선생님 관리 모드</h2>
+                                <p className="text-slate-400 font-bold">학생들의 게임 환경을 커스터마이징 하세요.</p>
+                            </div>
+                            <Button onClick={() => setView(AppView.INTRO)} variant="secondary" className="w-auto px-6 mb-0">나가기</Button>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 flex-1 overflow-y-auto no-scrollbar pr-2 pb-8">
+                            <section className="space-y-6">
+                                <div className="space-y-2">
+                                    <label className="text-sm font-black text-slate-700 block">다했니 API 키</label>
+                                    <input type="text" value={config.api} onChange={e => setConfig({...config, api: e.target.value})} placeholder="API 키를 입력하세요" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm focus:ring-2 ring-blue-400 outline-none" />
+                                    <p className="text-[10px] text-slate-400">API 키가 없으면 쿠키 연동 기능이 동작하지 않습니다.</p>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-black text-slate-700 block">일일 도전 횟수</label>
+                                        <input type="number" value={config.dailyLimit} onChange={e => setConfig({...config, dailyLimit: parseInt(e.target.value) || 0})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm outline-none" />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-black text-slate-700 block">상점 입장 제한</label>
+                                        <input type="number" value={config.shopLimit} onChange={e => setConfig({...config, shopLimit: parseInt(e.target.value) || 0})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm outline-none" />
+                                    </div>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="text-sm font-black text-slate-700 block">환전율 (캔디 → 쿠키)</label>
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-xs font-bold text-slate-400">캔디</span>
+                                        <input type="number" value={config.exchangeRate} onChange={e => setConfig({...config, exchangeRate: parseInt(e.target.value) || 1})} className="w-20 p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm text-center outline-none" />
+                                        <span className="text-xs font-bold text-slate-400">개당 쿠키 1개</span>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <section className="space-y-6">
+                                <h3 className="text-lg font-black text-slate-800 border-b pb-2">경제 밸런스 설정</h3>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-bold text-slate-500">뽑기 가격 (쿠키)</label>
+                                        <input type="number" value={config.priceGacha} onChange={e => setConfig({...config, priceGacha: parseInt(e.target.value) || 0})} className="w-full p-3 bg-slate-100 rounded-xl outline-none" />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-bold text-slate-500">하트 강화 (쿠키)</label>
+                                        <input type="number" value={config.priceHeartUpgrade} onChange={e => setConfig({...config, priceHeartUpgrade: parseInt(e.target.value) || 0})} className="w-full p-3 bg-slate-100 rounded-xl outline-none" />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-bold text-slate-500">점프 강화 (쿠키)</label>
+                                        <input type="number" value={config.priceJumpUpgrade} onChange={e => setConfig({...config, priceJumpUpgrade: parseInt(e.target.value) || 0})} className="w-full p-3 bg-slate-100 rounded-xl outline-none" />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-bold text-slate-500">하드모드 입장 (캔디)</label>
+                                        <input type="number" value={config.hardModeEntryCost} onChange={e => setConfig({...config, hardModeEntryCost: parseInt(e.target.value) || 0})} className="w-full p-3 bg-slate-100 rounded-xl outline-none" />
+                                    </div>
+                                </div>
+
+                                <div className="bg-amber-50 p-4 rounded-2xl border border-amber-100">
+                                    <h4 className="text-sm font-black text-amber-800 mb-2 flex items-center gap-2"><i className="fa-solid fa-triangle-exclamation"></i> 주의사항</h4>
+                                    <ul className="text-xs text-amber-700/80 space-y-1 list-disc pl-4 font-medium">
+                                        <li>설정값은 브라우저 세션에 저장되나, 매직 링크를 생성해야 학생들에게 적용됩니다.</li>
+                                        <li>매직 링크를 통해 접속한 학생들은 이 설정을 그대로 따르게 됩니다.</li>
+                                    </ul>
+                                </div>
+                            </section>
+                        </div>
+
+                        <div className="pt-8 border-t flex flex-col md:flex-row gap-4 shrink-0">
+                            <Button onClick={generateMagicLink} variant="success" className="flex-1 py-5 text-xl rounded-3xl mb-0 shadow-emerald-500/20"><i className="fa-solid fa-wand-magic-sparkles"></i> 매직 링크 생성하기</Button>
+                            <Button onClick={() => {
+                                setConfig(INITIAL_CONFIG);
+                                alert("기본값으로 초기화되었습니다.");
+                            }} variant="ghost" className="w-auto px-8 mb-0 py-5">초기화</Button>
                         </div>
                     </div>
                 </div>
